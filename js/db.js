@@ -85,7 +85,7 @@
         if(!Array.isArray(data)) continue;
         await c.doc(name).set({ name:name, data:data, ts:Date.now() });
       }
-    }catch(e){ console.warn('[CloudBase] 同步上传失败：', e && e.message); }
+    }catch(e){ if(global.CB) CB.syncError=(e&&e.message)||'上传失败'; console.warn('[CloudBase] 同步上传失败：', e && e.message); }
   }
   // 下载：启动时拉取云端快照，合并进本地（覆盖本地全量，以云端为准）
   async function syncFromCloud(){
@@ -100,7 +100,7 @@
       });
       localStorage.setItem(KEY, JSON.stringify(db));
       return true;
-    }catch(e){ console.warn('[CloudBase] 同步下载失败：', e && e.message); return false; }
+    }catch(e){ if(global.CB) CB.syncError=(e&&e.message)||'下载失败'; console.warn('[CloudBase] 同步下载失败：', e && e.message); return false; }
   }
 
   /* ---------- 知识点题库（前端生成，不云端同步） ---------- */

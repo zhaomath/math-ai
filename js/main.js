@@ -45,11 +45,21 @@
     if(CB.enabled){
       try{ await DB.syncFromCloud(); }catch(e){}
     }
+    renderCloudStatus();   // 在登录页直接显示云端连接状态与失败原因
     var s=DB.getSession();
     if(s){ var db=DB.get(); var u=DB.byId(db.users, s.uid);
       if(u){ App.user=u; enterApp(); return; } }
     showAuth();
   }
+  /* 渲染云端同步状态条（登录页可见，直接显示连接/故障原因） */
+  function renderCloudStatus(){
+    var el = document.getElementById('cloud-status');
+    if(!el || !global.CB || !CB.diagnose) return;
+    var d = CB.diagnose();
+    el.className = 'cloud-status ' + (d.ok ? 'ok' : 'bad');
+    el.innerHTML = '<b>'+d.title+'</b>' + (d.detail ? '<span>'+d.detail+'</span>' : '');
+  }
+
   function registerSW(){
     if('serviceWorker' in navigator){
       navigator.serviceWorker.register('sw.js').then(function(reg){
@@ -136,6 +146,10 @@
     document.getElementById('btn-menu').onclick=function(){ document.getElementById('sidebar').classList.toggle('open'); };
     if(!location.hash || location.hash==='#') location.hash='#/'+App.user.role+'/home';
     if(!window.__hashBound){ window.addEventListener('hashchange', render); window.__hashBound=true; }
+    // 未连云端时提示（避免以为数据已同步）
+    if(global.CB && CB.diagnose && !CB.diagnose().ok){
+      UI.toast('⚠️ '+CB.diagnose().title+'：'+CB.diagnose().detail, 4200);
+    }
     render();
   }
   function logout(){ UI.confirm('确定退出登录？', function(){ DB.clearSession(); App.user=null; App.setCurrentClass(null); location.hash=''; showAuth(); }); }
