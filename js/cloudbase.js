@@ -16,7 +16,7 @@
   'use strict';
 
   /* ====== 👇 请在此填入您的 CloudBase 环境 ID ====== */
-  var ENV_ID = 'math-ai-1gabcde123';
+  var ENV_ID = 'math-ai-1gabcde123-d1cgz20891cc0';
   /* =================================================== */
 
   var CB = {
@@ -98,9 +98,9 @@
     if(/invalid_app_sign|jwt must be provided|app_sign|signature|安全来源|非法来源|invalid source/.test(gwl))
       return '请求来源未授权：网关返回「' + gw.slice(0,120) + '」。请把访问域名「'+origin()+'」加入 CloudBase【环境 → 安全配置 → WEB 安全域名】并保存，等 1–3 分钟后再硬刷新（Ctrl+F5）；若用 file:// 打开也会失败，请用 http 访问。';
     if(/invalid_env|environment.*not.*exist|no such env|env.*not.*found|illegal env/.test(gwl))
-      return '环境ID可能不正确（网关返回：'+gw.slice(0,120)+'），请核对控制台“环境ID”（通常只需前半段，如 math-ai-1gabcde123）';
+      return '环境ID不正确（网关返回：'+gw.slice(0,120)+'），请到 CloudBase 控制台【环境 → 环境设置】复制完整环境 ID（形如 math-ai-xxxxxxxx-xxxxxxxx，不要截断）填入本文件 ENV_ID';
     if(/envid|env id|environment|invalid.*env|illegal.*env|not found|no such|no env|不存在该环境|格式|非法|parse error|environmentid|env_id/.test(m))
-      return '环境ID可能不正确，请核对控制台“环境ID”（通常只需前半段，如 math-ai-1gabcde123）';
+      return '环境ID可能不正确，请到 CloudBase 控制台【环境 → 环境设置】复制完整环境 ID（形如 math-ai-xxxxxxxx-xxxxxxxx，不要截断）';
     // 签名/来源被拒：网关返回 INVALID_APP_SIGN / jwt must be provided，根因是访问域名没加入「WEB 安全域名」
     if(/invalid_app_sign|jwt must be provided|app_sign|signature|安全来源|非法来源|invalid source|jwt/.test(m))
       return '请求来源未授权：请把访问域名「'+origin()+'」加入 CloudBase 控制台【环境 → 安全配置 → WEB 安全域名】后刷新；若用 file:// 直接打开也会失败，请用 http 访问（本地 python -m http.server 或部署后的网址）。';
