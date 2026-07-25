@@ -60,13 +60,16 @@
 
   CB.coll = function (name) { return CB.app.database().collection(name); };
 
-  /* —— 业务身份认证（用户名密码登录，手机号为 username）—— */
+  /* —— 业务身份认证（用户名密码登录，手机号规范为 username）—— */
+  // 统一把手机号转成合法用户名（兼容控制台"任意用户名"或"邮箱格式用户名"两种配置）
+  function toUser(phone){ return /@/.test(phone) ? phone : (phone + '@math.local'); }
+  CB.toUser = toUser;
   CB.signUp = async function (phone, pwd) {
-    await CB.auth.signUpWithUsernameAndPassword(phone, pwd);
+    await CB.auth.signUpWithUsernameAndPassword(toUser(phone), pwd);
     return await CB.auth.getLoginState();
   };
   CB.signIn = async function (phone, pwd) {
-    await CB.auth.signInWithUsernameAndPassword(phone, pwd);
+    await CB.auth.signInWithUsernameAndPassword(toUser(phone), pwd);
     return await CB.auth.getLoginState();
   };
   CB.signOut = async function () { try { await CB.auth.signOut(); } catch (e) {} };

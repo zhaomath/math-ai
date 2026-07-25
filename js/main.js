@@ -36,10 +36,15 @@
 
   /* ---------- 启动 ---------- */
   document.addEventListener('DOMContentLoaded', init);
-  function init(){
+  async function init(){
     registerSW();
     wireInstall();
     wireAuth();
+    // 初始化云端（未配置则自动降级本地模式）
+    try{ await CB.init(); }catch(e){}
+    if(CB.enabled){
+      try{ await DB.syncFromCloud(); await CB.ensureAnon(); }catch(e){}
+    }
     var s=DB.getSession();
     if(s){ var db=DB.get(); var u=DB.byId(db.users, s.uid);
       if(u){ App.user=u; enterApp(); return; } }
@@ -98,15 +103,19 @@
     var regRole=document.getElementById('reg-role');
     regRole.onchange=function(){ renderRegExtra(regRole.value); };
     // 提交
-    document.getElementById('form-login').onsubmit=function(e){ e.preventDefault();
-      var r=Auth.login(document.getElementById('login-phone').value, document.getElementById('login-pwd').value, document.getElementById('login-role').value);
-      document.getElementById('login-hint').textContent=r.ok?'':r.msg; if(r.ok){ App.user=r.user; enterApp(); } };
-    document.getElementById('form-register').onsubmit=function(e){ e.preventDefault();
+    document.getElementById('form-login').onsubmit=async function(e){ e.preventDefault();
+      var btn=this.querySelector('button[type=submit]'); if(btn) btn.disabled=true;
+      var r=await Auth.login(document.getElementById('login-phone').value, document.getElementById('login-pwd').value, document.getElementById('login-role').value);
+      document.getElementById('login-hint').textContent=r.ok?'':r.msg;
+      if(r.ok){ App.user=r.user; enterApp(); } else { if(btn) btn.disabled=false; } };
+    document.getElementById('form-register').onsubmit=async function(e){ e.preventDefault();
+      var btn=this.querySelector('button[type=submit]'); if(btn) btn.disabled=true;
       var d={ role:regRole.value, name:val('reg-name'), phone:val('reg-phone'), pwd:val('reg-pwd'), pwd2:val('reg-pwd2'),
         studentNo:val('reg-stuno'), school:val('reg-school') };
-      var r=Auth.register(d); document.getElementById('reg-hint').textContent=r.ok?'':r.msg; if(r.ok){ App.user=r.user; enterApp(); } };
-    document.getElementById('form-reset').onsubmit=function(e){ e.preventDefault();
-      var r=Auth.resetPwd(document.getElementById('reset-phone').value, document.getElementById('reset-pwd').value);
+      var r=await Auth.register(d); document.getElementById('reg-hint').textContent=r.ok?'':r.msg;
+      if(r.ok){ App.user=r.user; enterApp(); } else { if(btn) btn.disabled=false; } };
+    document.getElementById('form-reset').onsubmit=async function(e){ e.preventDefault();
+      var r=await Auth.resetPwd(document.getElementById('reset-phone').value, document.getElementById('reset-pwd').value);
       document.getElementById('reset-hint').textContent=r.msg; };
   }
   function renderRegExtra(role){
