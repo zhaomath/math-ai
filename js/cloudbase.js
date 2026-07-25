@@ -29,23 +29,32 @@
     syncError: ''    // 读写 sync 集合失败原因
   };
 
+  function origin(){ try { return location.origin; } catch(e){ return '当前页面'; } }
+
   /* 把 CloudBase 原始报错翻译成老师能看懂的中文
-   * 优先级：环境ID错误 > 匿名登录未开 > 集合/权限 > 网络 > 其它
+   * 优先级：file:// 误用 > 环境ID错误 > 来源未授权(签名) > 匿名登录未开 > 集合/权限 > 网络 > 其它
    * 注意：env 初始化失败的报错里可能同时含 "auth"，所以环境判断要放最前。
    */
   function friendlyErr(e){
+    // 用 file:// 直接双击打开，浏览器来源为 null，CloudBase 一律拒签，必须改用 http 访问
+    if(typeof location!=='undefined' && location.protocol==='file:')
+      return '请改用 http 访问：当前用 file:// 打开，CloudBase 会拒绝该来源。本地可执行「python -m http.server」后访问 http://localhost:8080，或打开已部署的 GitHub Pages 网址；并把该网址域名加入 CloudBase【环境 → 安全配置 → WEB 安全域名】。';
     var raw = (e && (e.message || e.errMsg || e.error || '')) + ' ' + (e && e.code ? String(e.code) : '');
     var m = raw.toLowerCase();
     if(/envid|env id|environment|invalid.*env|illegal.*env|not found|no such|no env|不存在该环境|格式|非法|parse error|environmentid|env_id/.test(m))
       return '环境ID可能不正确，请核对控制台“环境ID”（通常只需前半段，如 math-ai-1gabcde123）';
+    // 签名/来源被拒：网关返回 INVALID_APP_SIGN / jwt must be provided，根因是访问域名没加入「WEB 安全域名」
+    if(/invalid_app_sign|jwt must be provided|app_sign|signature|安全来源|非法来源|invalid source|jwt/.test(m))
+      return '请求来源未授权：请把访问域名「'+origin()+'」加入 CloudBase 控制台【环境 → 安全配置 → WEB 安全域名】后刷新；若用 file:// 直接打开也会失败，请用 http 访问（本地 python -m http.server 或部署后的网址）。';
     if(/anonymous login is disabled|anonymous login disabled|anonymous auth is disabled|anonymous.*disabled|未开启匿名登录|未开通匿名登录|匿名登录未开启|anonymous login not enabled|anonymous.*not.*open|请先开通匿名登录/.test(m))
       return '匿名登录未开启，请在控制台【身份认证 → 登录方式】打开“匿名登录”开关';
     if(/unauthorized|鉴权|permission denied|not authorized|insufficient privilege|privilege/.test(m))
       return '数据库集合 sync 不存在，或安全规则未设为 auth != null';
     if(/collection|database|sync|安全|rule/.test(m))
       return '数据库集合 sync 不存在，或安全规则未设为 auth != null';
-    if(/network|timeout|网络|超时|econn|fail|offline|disconnected/.test(m))
-      return '网络异常，请检查网络后刷新重试';
+    // 通用网络错误：CloudBase 真实错误常被 SDK 吞成 "network request error"，最常见的真因仍是来源未授权
+    if(/network|timeout|网络|超时|econn|fail|offline|disconnected|request error/.test(m))
+      return '云端请求失败（网络或来源被拒）。若网络正常，多半是访问域名未加入 CloudBase【环境 → 安全配置 → WEB 安全域名】，当前域名：'+origin()+'（file:// 打开也无效，请用 http 访问）';
     return '云端连接失败：' + (raw.trim() || '未知原因') + '（可在浏览器 F12 控制台查看详情）';
   }
 
