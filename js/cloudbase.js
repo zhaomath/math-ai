@@ -26,8 +26,53 @@
     _ready: null,
     ENV_ID: ENV_ID,
     lastError: '',   // 初始化失败原因（友好中文）
-    syncError: ''    // 读写 sync 集合失败原因
+    syncError: '',   // 读写 sync 集合失败原因
+    _gw: null,       // 最近一次 CloudBase 网关真实响应（用于诊断被 SDK 吞掉的错误）
+    _xhrPatched: false
   };
+
+  /* 拦截 XMLHttpRequest，捕获 CloudBase 网关（tcb-api.tencentcloudapi.com）的真实
+   * 响应体与状态码。SDK 会把 INVALID_APP_SIGN / 环境错误等真实报错吞成 "network request error"，
+   * 这里把原始返回存下来，供状态条「复制详情」展示，方便精准排查。 */
+  function patchXHR(){
+    if(CB._xhrPatched || typeof global.XMLHttpRequest === 'undefined') return;
+    var RealXHR = global.XMLHttpRequest;
+    function WrappedXHR(){
+      var x = new RealXHR();
+      var self = this;
+      var hs = { onload:null, onerror:null, onreadystatechange:null, ontimeout:null };
+      // 透传普通方法
+      ['open','setRequestHeader','getResponseHeader','getAllResponseHeaders','abort','overrideMimeType','send'].forEach(function(m){
+        if(typeof x[m] === 'function') self[m] = function(){ return x[m].apply(x, arguments); };
+      });
+      // 透传可读写属性
+      ['status','readyState','responseText','response','responseType','withCredentials','timeout','upload'].forEach(function(p){
+        Object.defineProperty(self, p, { get:function(){ return x[p]; }, set:function(v){ x[p]=v; } });
+      });
+      // 捕获 SDK 设置的处理器
+      ['onload','onerror','onreadystatechange','ontimeout'].forEach(function(ev){
+        Object.defineProperty(self, ev, { get:function(){ return hs[ev]; }, set:function(fn){ hs[ev]=fn; } });
+      });
+      x.onload = function(){
+        try {
+          var u = self._url || '';
+          if(/tcb-api\.tencentcloudapi\.com/.test(u)) {
+            CB._gw = { status: x.status, body: (x.responseText || '').slice(0, 400), url: u };
+          }
+        } catch(e){}
+        if(hs.onload) hs.onload();
+      };
+      x.onerror = function(e){ if(hs.onerror) hs.onerror(e); };
+      x.ontimeout = function(e){ if(hs.ontimeout) hs.ontimeout(e); };
+      x.onreadystatechange = function(){ if(hs.onreadystatechange) hs.onreadystatechange(); };
+      // 覆盖 open 以记录 URL
+      var _open = self.open;
+      self.open = function(method, url){ self._url = url; return _open.call(self, method, url, true); };
+    }
+    global.XMLHttpRequest = WrappedXHR;
+    CB._xhrPatched = true;
+  }
+  patchXHR();
 
   function origin(){ try { return location.origin; } catch(e){ return '当前页面'; } }
 
@@ -41,6 +86,13 @@
       return '请改用 http 访问：当前用 file:// 打开，CloudBase 会拒绝该来源。本地可执行「python -m http.server」后访问 http://localhost:8080，或打开已部署的 GitHub Pages 网址；并把该网址域名加入 CloudBase【环境 → 安全配置 → WEB 安全域名】。';
     var raw = (e && (e.message || e.errMsg || e.error || '')) + ' ' + (e && e.code ? String(e.code) : '');
     var m = raw.toLowerCase();
+    // 网关真实返回（被 SDK 吞掉的错误），优先据其判断
+    var gw = CB._gw && CB._gw.body ? CB._gw.body : '';
+    var gwl = gw.toLowerCase();
+    if(/invalid_app_sign|jwt must be provided|app_sign|signature|安全来源|非法来源|invalid source/.test(gwl))
+      return '请求来源未授权：网关返回「' + gw.slice(0,120) + '」。请把访问域名「'+origin()+'」加入 CloudBase【环境 → 安全配置 → WEB 安全域名】并保存，等 1–3 分钟后再硬刷新（Ctrl+F5）；若用 file:// 打开也会失败，请用 http 访问。';
+    if(/invalid_env|environment.*not.*exist|no such env|env.*not.*found|illegal env/.test(gwl))
+      return '环境ID可能不正确（网关返回：'+gw.slice(0,120)+'），请核对控制台“环境ID”（通常只需前半段，如 math-ai-1gabcde123）';
     if(/envid|env id|environment|invalid.*env|illegal.*env|not found|no such|no env|不存在该环境|格式|非法|parse error|environmentid|env_id/.test(m))
       return '环境ID可能不正确，请核对控制台“环境ID”（通常只需前半段，如 math-ai-1gabcde123）';
     // 签名/来源被拒：网关返回 INVALID_APP_SIGN / jwt must be provided，根因是访问域名没加入「WEB 安全域名」
@@ -54,15 +106,17 @@
       return '数据库集合 sync 不存在，或安全规则未设为 auth != null';
     // 通用网络错误：CloudBase 真实错误常被 SDK 吞成 "network request error"，最常见的真因仍是来源未授权
     if(/network|timeout|网络|超时|econn|fail|offline|disconnected|request error/.test(m))
-      return '云端请求失败（网络或来源被拒）。若网络正常，多半是访问域名未加入 CloudBase【环境 → 安全配置 → WEB 安全域名】，当前域名：'+origin()+'（file:// 打开也无效，请用 http 访问）';
+      return '云端请求失败。若网络正常，多半是：①访问域名未加入 CloudBase【环境 → 安全配置 → WEB 安全域名】（当前域名：'+origin()+'）；②白名单刚保存尚未生效（等 1–3 分钟）；③浏览器/Service Worker 缓存了旧代码——请硬刷新（Ctrl+F5），或在 DevTools→Application→Service Workers 点「Unregister」后刷新。';
     return '云端连接失败：' + (raw.trim() || '未知原因') + '（可在浏览器 F12 控制台查看详情）';
   }
 
   /* 记录原始错误，供状态条展示详情 */
   function setLastError(e){
     CB.lastError = friendlyErr(e);
-    CB.rawError = (e && (e.message || e.errMsg || e.error || e.stack || '')) + (e && e.code ? ' [code:' + e.code + ']' : '');
+    var gw = CB._gw ? (' [网关' + (CB._gw.status || '?') + ': ' + (CB._gw.body || '').slice(0, 240) + ']') : '';
+    CB.rawError = (e && (e.message || e.errMsg || e.error || e.stack || '')) + (e && e.code ? ' [code:' + e.code + ']' : '') + gw;
     console.warn('[CloudBase] 原始错误：', CB.rawError, e);
+    console.warn('[CloudBase] 诊断 → 来源:', location.origin, '| 协议:', location.protocol, '| 环境:', ENV_ID, '| 网关记录:', CB._gw);
   }
 
   /* 检查浏览器全局 CloudBase SDK（已由 index.html 通过 <script src="vendor/cloudbase.min.js"> 引入）

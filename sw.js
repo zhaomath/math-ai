@@ -1,11 +1,13 @@
 /* =========================================================
  * sw.js —— Service Worker：让 PWA 可离线使用
  * ========================================================= */
-const CACHE_NAME = 'mathai-v2';
+const CACHE_NAME = 'mathai-v3';
 const ASSETS = [
   './',
   './index.html',
   './css/style.css',
+  './vendor/cloudbase.min.js',
+  './js/cloudbase.js',
   './js/db.js',
   './js/ai.js',
   './js/ui.js',
@@ -41,25 +43,21 @@ self.addEventListener('activate', function(e){
   );
 });
 
-// 请求策略：缓存优先，网络回退并更新缓存
+// 请求策略：网络优先，失败回退缓存（保证更新及时生效，同时支持离线）
 self.addEventListener('fetch', function(e){
   // 非 GET 请求直接走网络
   if(e.request.method !== 'GET') return;
   e.respondWith(
-    caches.match(e.request).then(function(cached){
-      if(cached){
-        // 后台尝试更新缓存
-        fetch(e.request).then(function(res){
-          if(res && res.status===200) caches.open(CACHE_NAME).then(function(c){ c.put(e.request, res.clone()); });
-        }).catch(function(){});
-        return cached;
-      }
-      return fetch(e.request).then(function(res){
-        if(!res || res.status!==200 || res.type!=='basic') return res;
+    fetch(e.request).then(function(res){
+      // 同源成功响应写入缓存，供离线使用
+      if(res && res.status===200 && res.type==='basic'){
         var clone = res.clone();
         caches.open(CACHE_NAME).then(function(c){ c.put(e.request, clone); });
-        return res;
-      }).catch(function(){
+      }
+      return res;
+    }).catch(function(){
+      return caches.match(e.request).then(function(cached){
+        if(cached) return cached;
         // 离线且无缓存时返回 index.html（单页应用兜底）
         return caches.match('./index.html');
       });
