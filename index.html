@@ -110,8 +110,7 @@
   <div id="modal-root"></div>
   <div id="toast-root"></div>
 
-  <!-- CloudBase Web SDK（v1 经典版：只需环境 ID；离线/未配置时自动降级本地模式） -->
-  <script src="https://cdn.jsdelivr.net/npm/@cloudbase/js-sdk@1/dist/cloudbase.js"></script>
+  <!-- CloudBase Web SDK 由 js/cloudbase.js 内部用动态 import 加载（jsDelivr +esm 转译，国内可访问）；离线/未配置自动降级本地模式 -->
   <script src="js/cloudbase.js"></script>
   <script src="js/db.js"></script>
   <script src="js/ai.js"></script>

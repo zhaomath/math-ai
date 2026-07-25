@@ -44,6 +44,25 @@
     return '云端连接失败：' + (raw.trim() || '未知原因');
   }
 
+  /* 动态加载浏览器版 CloudBase SDK（v1 ESM，jsDelivr +esm 转译，国内可访问；失败回退 esm.sh） */
+  function loadSDK() {
+    var sources = [
+      'https://cdn.jsdelivr.net/npm/@cloudbase/js-sdk@1/+esm',
+      'https://esm.sh/@cloudbase/js-sdk@1'
+    ];
+    return (async function () {
+      var lastErr;
+      for (var i = 0; i < sources.length; i++) {
+        try {
+          var mod = await import(sources[i]);   // 浏览器原生动态 import ESM
+          var sdk = mod && (mod.default || mod);
+          if (sdk && typeof sdk.init === 'function') return sdk;
+        } catch (e) { lastErr = e; }
+      }
+      throw lastErr || new Error('SDK 加载失败');
+    })();
+  }
+
   function hasEnv(){
     return !!ENV_ID && ENV_ID.indexOf('YOUR_') !== 0 && ENV_ID.length > 4;
   }
@@ -58,13 +77,16 @@
         console.warn('[CloudBase] 未配置 ENV_ID，使用本地模式');
         CB.enabled = false; return false;
       }
-      if (typeof cloudbase === 'undefined') {
-        CB.lastError = 'CloudBase SDK 未加载（可能是网络/CDN 问题）';
-        console.warn('[CloudBase] SDK 未加载，使用本地模式');
+      var sdk;
+      try {
+        sdk = await loadSDK();
+      } catch (e) {
+        CB.lastError = 'CloudBase SDK 加载失败（CDN/网络问题，可换网络或稍后重试）';
+        console.warn('[CloudBase] SDK 动态加载失败，降级本地模式：', e && e.message);
         CB.enabled = false; return false;
       }
       try {
-        CB.app = cloudbase.init({ env: ENV_ID });
+        CB.app = sdk.init({ env: ENV_ID });
         CB.auth = CB.app.auth();
         await CB.auth.signInAnonymously();   // 基础登录态，满足数据库安全规则 auth != null
         CB.enabled = true;
