@@ -167,3 +167,5 @@ th{ color:var(--muted); font-weight:600; font-size:13px; }
 .cloud-status span{ opacity:.92; }
 .cloud-status.ok{ background:rgba(34,160,110,.12); color:#1f8a5b; border:1px solid rgba(34,160,110,.35); }
 .cloud-status.bad{ background:rgba(220,60,60,.10); color:#c0392b; border:1px solid rgba(220,60,60,.35); }
+.cloud-status .btn-text{ align-self:flex-start; margin-top:4px; padding:4px 10px; border:none; border-radius:6px; background:rgba(192,57,43,.15); color:#c0392b; font-size:12px; cursor:pointer; }
+.cloud-status .btn-text:hover{ background:rgba(192,57,43,.25); }

@@ -57,7 +57,15 @@
     if(!el || !global.CB || !CB.diagnose) return;
     var d = CB.diagnose();
     el.className = 'cloud-status ' + (d.ok ? 'ok' : 'bad');
-    el.innerHTML = '<b>'+d.title+'</b>' + (d.detail ? '<span>'+d.detail+'</span>' : '');
+    var retryBtn = d.ok ? '' : ' <button type="button" id="btn-retry-cloud" class="btn-text">重试</button>';
+    el.innerHTML = '<b>'+d.title+'</b>' + (d.detail ? '<span>'+d.detail+'</span>' : '') + retryBtn;
+    var btn = document.getElementById('btn-retry-cloud');
+    if(btn) btn.onclick = async function(){
+      btn.textContent = '连接中…';
+      try{ await CB.retry(); }catch(e){}
+      if(CB.enabled) try{ await DB.syncFromCloud(); }catch(e){}
+      renderCloudStatus();
+    };
   }
 
   function registerSW(){
