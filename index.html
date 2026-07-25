@@ -110,7 +110,46 @@
   <div id="modal-root"></div>
   <div id="toast-root"></div>
 
-  <!-- CloudBase Web SDK（v1.7.1 官方 UMD 构建，已本地化到 vendor/，暴露全局 cloudbase，含 signInAnonymously） -->
+  <!-- 诊断 shim：必须在 SDK 之前加载。拦截 fetch / XHR，把 CloudBase 网关（tcb-api.tencentcloudapi.com / *.tcloudbasegateway.com）
+       的真实响应（含被 SDK 吞掉的错误码 INVALID_ENV / ACCESS_TOKEN_DISABLED / INVALID_APP_SIGN 等）
+       写入 window.__CB_GW，供状态条「复制详情」展示，便于精准排查"数据不通"。 -->
+  <script>
+  (function(){
+    window.__CB_GW = null;
+    function record(url, status, body){
+      try {
+        if (url && /tcb-api\.tencentcloudapi\.com|tcloudbasegateway\.com/.test(url)) {
+          window.__CB_GW = { url: String(url), status: status, body: (body || '').slice(0, 600) };
+        }
+      } catch(e){}
+    }
+    // 拦截 fetch（v2+ SDK 使用）
+    var _fetch = window.fetch ? window.fetch.bind(window) : null;
+    if (_fetch) {
+      window.fetch = function(u, opts){
+        return _fetch(u, opts).then(function(r){
+          var url = (typeof u === 'string') ? u : (u && u.url);
+          try { r.clone().text().then(function(t){ record(url, r.status, t); }).catch(function(){}); } catch(e){}
+          return r;
+        }).catch(function(err){ throw err; });
+      };
+    }
+    // 拦截 XHR（兜底，旧逻辑/兼容性）
+    var _XHR = window.XMLHttpRequest;
+    if (_XHR && _XHR.prototype) {
+      var _open = _XHR.prototype.open;
+      _XHR.prototype.open = function(m, url){ this.__cbUrl = url; return _open.apply(this, arguments); };
+      var _send = _XHR.prototype.send;
+      _XHR.prototype.send = function(){
+        var self = this;
+        try { this.addEventListener('loadend', function(){ try { record(self.__cbUrl, self.status, self.responseText); } catch(e){} }); } catch(e){}
+        return _send.apply(this, arguments);
+      };
+    }
+  })();
+  </script>
+
+  <!-- CloudBase Web SDK（v3.6.4，由 esbuild 从 npm 打包为浏览器 IIFE，已本地化到 vendor/，暴露全局 cloudbase） -->
   <script src="vendor/cloudbase.min.js"></script>
   <script src="js/cloudbase.js"></script>
   <script src="js/db.js"></script>

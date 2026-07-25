@@ -1,5 +1,5 @@
 /* =========================================================
- * cloudbase.js —— CloudBase Web SDK 接入层（v1 经典版）
+ * cloudbase.js —— CloudBase Web SDK 接入层（v3，esbuild 打包的浏览器 IIFE）
  *
  * 【配置】把下方 ENV_ID 改成您在 CloudBase 控制台创建的环境 ID。
  *   位置：CloudBase 控制台 → 环境 → 环境设置 → 环境 ID（形如 xxxx-envId）
@@ -27,52 +27,13 @@
     ENV_ID: ENV_ID,
     lastError: '',   // 初始化失败原因（友好中文）
     syncError: '',   // 读写 sync 集合失败原因
-    _gw: null,       // 最近一次 CloudBase 网关真实响应（用于诊断被 SDK 吞掉的错误）
-    _xhrPatched: false
+    _gw: null       // 最近一次 CloudBase 网关真实响应（由 index.html 诊断 shim 写入 window.__CB_GW）
   };
 
-  /* 拦截 XMLHttpRequest，捕获 CloudBase 网关（tcb-api.tencentcloudapi.com）的真实
-   * 响应体与状态码。SDK 会把 INVALID_APP_SIGN / 环境错误等真实报错吞成 "network request error"，
-   * 这里把原始返回存下来，供状态条「复制详情」展示，方便精准排查。 */
-  function patchXHR(){
-    if(CB._xhrPatched || typeof global.XMLHttpRequest === 'undefined') return;
-    var RealXHR = global.XMLHttpRequest;
-    function WrappedXHR(){
-      var x = new RealXHR();
-      var self = this;
-      var hs = { onload:null, onerror:null, onreadystatechange:null, ontimeout:null };
-      // 透传普通方法
-      ['open','setRequestHeader','getResponseHeader','getAllResponseHeaders','abort','overrideMimeType','send'].forEach(function(m){
-        if(typeof x[m] === 'function') self[m] = function(){ return x[m].apply(x, arguments); };
-      });
-      // 透传可读写属性
-      ['status','readyState','responseText','response','responseType','withCredentials','timeout','upload'].forEach(function(p){
-        Object.defineProperty(self, p, { get:function(){ return x[p]; }, set:function(v){ x[p]=v; } });
-      });
-      // 捕获 SDK 设置的处理器
-      ['onload','onerror','onreadystatechange','ontimeout'].forEach(function(ev){
-        Object.defineProperty(self, ev, { get:function(){ return hs[ev]; }, set:function(fn){ hs[ev]=fn; } });
-      });
-      x.onload = function(){
-        try {
-          var u = self._url || '';
-          if(/tcb-api\.tencentcloudapi\.com/.test(u)) {
-            CB._gw = { status: x.status, body: (x.responseText || '').slice(0, 400), url: u };
-          }
-        } catch(e){}
-        if(hs.onload) hs.onload();
-      };
-      x.onerror = function(e){ if(hs.onerror) hs.onerror(e); };
-      x.ontimeout = function(e){ if(hs.ontimeout) hs.ontimeout(e); };
-      x.onreadystatechange = function(){ if(hs.onreadystatechange) hs.onreadystatechange(); };
-      // 覆盖 open 以记录 URL
-      var _open = self.open;
-      self.open = function(method, url){ self._url = url; return _open.call(self, method, url, true); };
-    }
-    global.XMLHttpRequest = WrappedXHR;
-    CB._xhrPatched = true;
-  }
-  patchXHR();
+  /* 诊断：CloudBase 网关（tcb-api.tencentcloudapi.com）的真实响应由 index.html 中的诊断 shim
+   * （在 SDK 加载前注入，同时拦截 fetch 与 XHR）捕获并记录到 window.__CB_GW。
+   * 这里提供读取入口，供状态条「复制详情」展示被 SDK 吞掉的真实报错（INVALID_ENV / ACCESS_TOKEN_DISABLED 等）。 */
+  function gw(){ try { return window.__CB_GW || null; } catch(e){ return null; } }
 
   function origin(){ try { return location.origin; } catch(e){ return '当前页面'; } }
 
@@ -99,6 +60,9 @@
       return '请求来源未授权：网关返回「' + gw.slice(0,120) + '」。请把访问域名「'+origin()+'」加入 CloudBase【环境 → 安全配置 → WEB 安全域名】并保存，等 1–3 分钟后再硬刷新（Ctrl+F5）；若用 file:// 打开也会失败，请用 http 访问。';
     if(/invalid_env|environment.*not.*exist|no such env|env.*not.*found|illegal env/.test(gwl))
       return '环境ID不正确（网关返回：'+gw.slice(0,120)+'），请到 CloudBase 控制台【环境 → 环境设置】复制完整环境 ID（形如 math-ai-xxxxxxxx-xxxxxxxx，不要截断）填入本文件 ENV_ID';
+    // 后端要求 SDK 2.0+（旧 SDK 匿名登录会被拒并报 ACCESS_TOKEN_DISABLED）——本应用 vendor/cloudbase.min.js 须为 v3 打包版
+    if(/access_token_disabled|请升级 js sdk|升级.*js sdk.*2\.0|anonymous login is not support/.test(gwl + ' ' + m))
+      return '云端要求 CloudBase SDK 升级到 2.0+（报 ACCESS_TOKEN_DISABLED）。本应用 vendor/cloudbase.min.js 须为 v3 打包版并已重新部署；同时请在控制台【身份认证 → 登录方式】确认“匿名登录”为开启状态。';
     if(/envid|env id|environment|invalid.*env|illegal.*env|not found|no such|no env|不存在该环境|格式|非法|parse error|environmentid|env_id/.test(m))
       return '环境ID可能不正确，请到 CloudBase 控制台【环境 → 环境设置】复制完整环境 ID（形如 math-ai-xxxxxxxx-xxxxxxxx，不要截断）';
     // 签名/来源被拒：网关返回 INVALID_APP_SIGN / jwt must be provided，根因是访问域名没加入「WEB 安全域名」
@@ -130,7 +94,8 @@
   }
 
   /* 检查浏览器全局 CloudBase SDK（已由 index.html 通过 <script src="vendor/cloudbase.min.js"> 引入）
-   * 该文件为官方 UMD 构建（v1.7.1，已本地化），暴露全局变量 window.cloudbase，含 signInAnonymously。 */
+   * 该文件为 esbuild 打包的 v3.6.4 浏览器 IIFE（--bundle --format=iife --global-name=cloudbase），
+   * 暴露全局变量 window.cloudbase，含 init / auth().signInAnonymously() / database() 等标准 v2+ API。 */
   function getSDK(){
     try {
       if (typeof cloudbase !== 'undefined' && cloudbase && typeof cloudbase.init === 'function') return cloudbase;
@@ -161,7 +126,7 @@
       try {
         CB.app = sdk.init({ env: ENV_ID });
         CB.appAuth = CB.app.auth();
-        await CB.appAuth.anonymousAuthProvider().signIn();   // 匿名登录，满足数据库安全规则 auth != null
+        await CB.appAuth.signInAnonymously();   // v3 匿名登录（满足数据库安全规则 auth != null；后端要求 SDK 2.0+，否则报 ACCESS_TOKEN_DISABLED）
         CB.enabled = true;
         CB.lastError = '';
         CB.rawError = '';
