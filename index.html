@@ -110,7 +110,8 @@
   <div id="modal-root"></div>
   <div id="toast-root"></div>
 
-  <!-- CloudBase Web SDK 由 js/cloudbase.js 内部用动态 import 加载（jsDelivr +esm 转译，国内可访问）；离线/未配置自动降级本地模式 -->
+  <!-- CloudBase Web SDK（v1.7.1 官方 UMD 构建，已本地化到 vendor/，暴露全局 cloudbase，含 signInAnonymously） -->
+  <script src="vendor/cloudbase.min.js"></script>
   <script src="js/cloudbase.js"></script>
   <script src="js/db.js"></script>
   <script src="js/ai.js"></script>
