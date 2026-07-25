@@ -50,7 +50,7 @@
   }
   function get(){
     var db = load();
-    if(db) return db;
+    if(db){ normalize(db); return db; }
     // 云端模式：本地为空时给空壳（等 syncFromCloud 拉取），不自动生成演示数据以免污染共享库
     if(global.CB && CB.enabled){
       return emptyDb();
@@ -72,6 +72,28 @@
   function uid(p){ return (p||'id')+'_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
   function byId(arr,id){ for(var i=0;i<arr.length;i++) if(arr[i].id===id) return arr[i]; return null; }
   function byPhone(arr,phone){ for(var i=0;i<arr.length;i++) if(arr[i].phone===phone) return arr[i]; return null; }
+  function uniqById(arr){ var m={}, r=[]; (arr||[]).forEach(function(x){ if(x && x.id && !m[x.id]){ m[x.id]=1; r.push(x); } }); return r; }
+  /* 数据自修复：students / parents 未纳入云端同步集合，跨设备拉取后可能为空，
+   * 而 users（含学生/家长身份）是唯一已同步的集合。这里以 users 为权威源，
+   * 把缺失的学生/家长补回 students / parents，保证各端显示一致、概览人数正确。
+   * 返回 true 表示发生了补齐（需要回写云端）。 */
+  function normalize(db){
+    if(!db || !Array.isArray(db.users)) return false;
+    db.students = db.students || [];
+    db.parents = db.parents || [];
+    var have = {};
+    db.students.concat(db.parents).forEach(function(x){ if(x && x.id) have[x.id]=1; });
+    var changed = false;
+    db.users.forEach(function(u){
+      if((u.role==='student' || u.role==='parent') && !have[u.id]){
+        if(u.role==='student') db.students.push(u); else db.parents.push(u);
+        have[u.id]=1; changed=true;
+      }
+    });
+    db.students = uniqById(db.students);
+    db.parents = uniqById(db.parents);
+    return changed;
+  }
 
   /* ---------- 云端同步 ---------- */
   // 上传：把需同步的集合整体写成云端集合里的独立文档（每次 save 约 5 次调用，极省额度）
@@ -98,7 +120,9 @@
       docs.forEach(function(d){
         if(d && SYNC_NAMES.indexOf(d.name)>=0 && Array.isArray(d.data)) db[d.name] = d.data;
       });
+      var changed = normalize(db);   // 以 users 为权威源补齐 students / parents
       localStorage.setItem(KEY, JSON.stringify(db));
+      if(changed) pushToCloud(db);   // 把补齐后的数据回写云端，保证各端一致
       return true;
     }catch(e){ if(global.CB) CB.syncError=(e&&e.message)||'下载失败'; console.warn('[CloudBase] 同步下载失败：', e && e.message); return false; }
   }
