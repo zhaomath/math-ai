@@ -34,11 +34,11 @@
    * 注意：env 初始化失败的报错里可能同时含 "auth"，所以环境判断要放最前。
    */
   function friendlyErr(e){
-    var raw = (e && (e.message || e.errMsg || '')) + ' ' + (e && e.code ? String(e.code) : '');
+    var raw = (e && (e.message || e.errMsg || e.error || '')) + ' ' + (e && e.code ? String(e.code) : '');
     var m = raw.toLowerCase();
     if(/envid|env id|environment|invalid.*env|illegal.*env|not found|no such|no env|不存在该环境|格式|非法|parse error|environmentid|env_id/.test(m))
       return '环境ID可能不正确，请核对控制台“环境ID”（通常只需前半段，如 math-ai-1gabcde123）';
-    if(/anonymous|anonymous login|匿名登录|signin anonymously/.test(m))
+    if(/anonymous login is disabled|anonymous login disabled|anonymous auth is disabled|anonymous.*disabled|未开启匿名登录|未开通匿名登录|匿名登录未开启|anonymous login not enabled|anonymous.*not.*open|请先开通匿名登录/.test(m))
       return '匿名登录未开启，请在控制台【身份认证 → 登录方式】打开“匿名登录”开关';
     if(/unauthorized|鉴权|permission denied|not authorized|insufficient privilege|privilege/.test(m))
       return '数据库集合 sync 不存在，或安全规则未设为 auth != null';
@@ -47,6 +47,13 @@
     if(/network|timeout|网络|超时|econn|fail|offline|disconnected/.test(m))
       return '网络异常，请检查网络后刷新重试';
     return '云端连接失败：' + (raw.trim() || '未知原因') + '（可在浏览器 F12 控制台查看详情）';
+  }
+
+  /* 记录原始错误，供状态条展示详情 */
+  function setLastError(e){
+    CB.lastError = friendlyErr(e);
+    CB.rawError = (e && (e.message || e.errMsg || e.error || e.stack || '')) + (e && e.code ? ' [code:' + e.code + ']' : '');
+    console.warn('[CloudBase] 原始错误：', CB.rawError, e);
   }
 
   /* 动态加载浏览器版 CloudBase SDK（v1 ESM，jsDelivr +esm 转译，国内可访问；失败回退 esm.sh） */
@@ -96,13 +103,13 @@
         await CB.auth.signInAnonymously();   // 基础登录态，满足数据库安全规则 auth != null
         CB.enabled = true;
         CB.lastError = '';
+        CB.rawError = '';
         console.log('[CloudBase] 已启用（匿名登录），环境 =', ENV_ID);
         return true;
       } catch (e) {
         // 匿名登录未开启或失败 → 降级本地模式（跨设备不同步，但页面照常可用）
         CB.enabled = false;
-        CB.lastError = friendlyErr(e);
-        console.warn('[CloudBase] 初始化/匿名登录失败，降级本地模式：', e && e.message);
+        setLastError(e);
         return false;
       }
     })();
@@ -116,6 +123,7 @@
     CB._ready = null;
     CB.enabled = false;
     CB.lastError = '';
+    CB.rawError = '';
     CB.syncError = '';
     return await CB.init();
   };
@@ -123,10 +131,10 @@
   /* 诊断当前同步状态，供界面显示 */
   CB.diagnose = function () {
     if (CB.enabled) {
-      return { ok:true, mode:'cloud', title:'☁️ 云端已连接', detail:'多设备数据同步已开启' };
+      return { ok:true, mode:'cloud', title:'☁️ 云端已连接', detail:'多设备数据同步已开启', rawError:'' };
     }
     var detail = CB.lastError || (CB.syncError || '未连接云端，当前仅本机数据，不跨设备');
-    return { ok:false, mode:'local', title:'💾 本机模式', detail:detail };
+    return { ok:false, mode:'local', title:'💾 本机模式', detail:detail, rawError:CB.rawError || '' };
   };
 
   CB.mode = function () { return CB.enabled ? 'cloud' : 'local'; };

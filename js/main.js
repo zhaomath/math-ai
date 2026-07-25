@@ -57,14 +57,19 @@
     if(!el || !global.CB || !CB.diagnose) return;
     var d = CB.diagnose();
     el.className = 'cloud-status ' + (d.ok ? 'ok' : 'bad');
-    var retryBtn = d.ok ? '' : ' <button type="button" id="btn-retry-cloud" class="btn-text">重试</button>';
-    el.innerHTML = '<b>'+d.title+'</b>' + (d.detail ? '<span>'+d.detail+'</span>' : '') + retryBtn;
+    var raw = d.rawError ? '<code class="raw-err" title="原始错误">'+d.rawError.replace(/</g,'&lt;')+'</code>' : '';
+    var btns = d.ok ? '' : ' <span class="status-btns"><button type="button" id="btn-retry-cloud" class="btn-text">重试</button>' + (d.rawError ? '<button type="button" id="btn-copy-err" class="btn-text">复制详情</button></span>' : '</span>');
+    el.innerHTML = '<b>'+d.title+'</b>' + (d.detail ? '<span>'+d.detail+'</span>' : '') + raw + btns;
     var btn = document.getElementById('btn-retry-cloud');
     if(btn) btn.onclick = async function(){
       btn.textContent = '连接中…';
       try{ await CB.retry(); }catch(e){}
       if(CB.enabled) try{ await DB.syncFromCloud(); }catch(e){}
       renderCloudStatus();
+    };
+    var copyBtn = document.getElementById('btn-copy-err');
+    if(copyBtn) copyBtn.onclick = async function(){
+      try{ await navigator.clipboard.writeText(d.rawError); copyBtn.textContent='已复制'; setTimeout(function(){copyBtn.textContent='复制详情';},1500); }catch(e){ copyBtn.textContent='复制失败'; }
     };
   }
 
