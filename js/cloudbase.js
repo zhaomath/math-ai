@@ -22,7 +22,7 @@
   var CB = {
     enabled: false,
     app: null,
-    auth: null,
+    appAuth: null,
     _ready: null,
     ENV_ID: ENV_ID,
     lastError: '',   // 初始化失败原因（友好中文）
@@ -87,8 +87,8 @@
       }
       try {
         CB.app = sdk.init({ env: ENV_ID });
-        CB.auth = CB.app.auth();
-        await CB.auth.signInAnonymously();   // 基础登录态，满足数据库安全规则 auth != null
+        CB.appAuth = CB.app.auth();
+        await CB.appAuth.anonymousAuthProvider().signIn();   // 匿名登录，满足数据库安全规则 auth != null
         CB.enabled = true;
         CB.lastError = '';
         CB.rawError = '';

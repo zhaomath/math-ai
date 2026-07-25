@@ -8,3 +8,11 @@ Thumbs.db
 
 # 编辑器临时锁文件
 ~$*
+
+# CloudBase SDK 本地打包环境（vendor/cloudbase.min.js 已生成并跟踪；以下不提交）
+_build/node_modules/
+_build/package-lock.json
+_build/package.json
+_build/probe*.js
+vendor/cloudbase.esm.js
+
