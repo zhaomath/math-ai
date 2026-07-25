@@ -76,6 +76,12 @@
 
   function origin(){ try { return location.origin; } catch(e){ return '当前页面'; } }
 
+  // 已知白名单主机（与 CloudBase 控制台【WEB 安全域名】保持一致）
+  var KNOWN_HOSTS = ['zhaomath.github.io', 'localhost', '127.0.0.1'];
+  function hostInWhitelist(){
+    try { return KNOWN_HOSTS.indexOf(location.hostname) !== -1; } catch(e){ return false; }
+  }
+
   /* 把 CloudBase 原始报错翻译成老师能看懂的中文
    * 优先级：file:// 误用 > 环境ID错误 > 来源未授权(签名) > 匿名登录未开 > 集合/权限 > 网络 > 其它
    * 注意：env 初始化失败的报错里可能同时含 "auth"，所以环境判断要放最前。
@@ -104,9 +110,13 @@
       return '数据库集合 sync 不存在，或安全规则未设为 auth != null';
     if(/collection|database|sync|安全|rule/.test(m))
       return '数据库集合 sync 不存在，或安全规则未设为 auth != null';
-    // 通用网络错误：CloudBase 真实错误常被 SDK 吞成 "network request error"，最常见的真因仍是来源未授权
-    if(/network|timeout|网络|超时|econn|fail|offline|disconnected|request error/.test(m))
-      return '云端请求失败。若网络正常，多半是：①访问域名未加入 CloudBase【环境 → 安全配置 → WEB 安全域名】（当前域名：'+origin()+'）；②白名单刚保存尚未生效（等 1–3 分钟）；③浏览器/Service Worker 缓存了旧代码——请硬刷新（Ctrl+F5），或在 DevTools→Application→Service Workers 点「Unregister」后刷新。';
+    // 通用网络错误：CloudBase 真实错误常被 SDK 吞成 "network request error"
+    if(/network|timeout|网络|超时|econn|fail|offline|disconnected|request error/.test(m)){
+      // 优先判断：当前访问来源根本不在白名单（如局域网IP 192.168.x.x、其它域名）
+      if(!hostInWhitelist())
+        return '当前访问来源「'+origin()+'」不在 CloudBase 白名单。请改用 https://zhaomath.github.io/math-ai/ （手机/电脑用同一网址）或本地 http://localhost 打开；若必须用局域网IP（如 192.168.x.x:8080）访问，请把该IP也加入控制台【环境 → 安全配置 → WEB 安全域名】。';
+      return '云端请求失败。若网络正常，多半是：①白名单刚保存尚未生效（等 1–3 分钟）；②浏览器/Service Worker 缓存了旧代码——请硬刷新（Ctrl+F5），或在 DevTools→Application→Service Workers 点「Unregister」后刷新；③确认打开的网址是 https://zhaomath.github.io/math-ai/（当前来源：'+origin()+'）。';
+    }
     return '云端连接失败：' + (raw.trim() || '未知原因') + '（可在浏览器 F12 控制台查看详情）';
   }
 
