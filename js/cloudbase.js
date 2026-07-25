@@ -16,7 +16,7 @@
   'use strict';
 
   /* ====== 👇 请在此填入您的 CloudBase 环境 ID ====== */
-  var ENV_ID = 'YOUR_CLOUDBASE_ENV_ID';
+  var ENV_ID = 'math-ai-1gabcde123-d1cgz20891cc0';
   /* =================================================== */
 
   var CB = {
