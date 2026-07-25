@@ -1,0 +1,7 @@
+# 开发脚本 / 临时文件（无需部署）
+_gen_icons.py
+_test_*.js
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db

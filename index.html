@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#ff8c1a" />
+  <meta name="description" content="小学数学AI助教：课堂互动、作业批改、学情分析、个性化辅导，覆盖教师/学生/家长三端。" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="数学AI助教" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <title>小学数学AI助教</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="theme-login">
+  <!-- 登录 / 注册 屏 -->
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-card">
+      <!-- 安装提示（PWA） -->
+      <div id="install-banner" class="install-banner">
+        <div class="ib-icon">📲</div>
+        <div class="ib-text"><b>安装到桌面/主屏</b>像 App 一样使用，离线也能打开</div>
+        <button type="button" class="btn btn-primary" id="btn-install">安装</button>
+      </div>
+      <div class="brand">
+        <div class="brand-logo">📐</div>
+        <h1>小学数学AI助教</h1>
+        <p class="brand-sub">课堂互动 · 作业批改 · 学情分析 · 个性化辅导</p>
+      </div>
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">登录</button>
+        <button class="auth-tab" data-tab="register">注册</button>
+        <button class="auth-tab" data-tab="reset">密码重置</button>
+      </div>
+
+      <!-- 登录 -->
+      <form id="form-login" class="auth-form active">
+        <label>手机号<input type="tel" id="login-phone" placeholder="11位手机号" maxlength="11" required /></label>
+        <label>密码<input type="password" id="login-pwd" placeholder="密码" required /></label>
+        <label class="role-pick">身份
+          <select id="login-role">
+            <option value="teacher">教师</option>
+            <option value="student">学生</option>
+            <option value="parent">家长</option>
+          </select>
+        </label>
+        <button type="submit" class="btn btn-primary">登 录</button>
+        <div class="auth-hint" id="login-hint"></div>
+        <div class="auth-demo">
+          <span>演示账号：</span>
+          <button type="button" class="chip" data-role="teacher">教师 13800000001</button>
+          <button type="button" class="chip" data-role="student">学生 13800000011</button>
+          <button type="button" class="chip" data-role="parent">家长 13800000021</button>
+          <span class="pwd-tip">密码均为 123456</span>
+        </div>
+      </form>
+
+      <!-- 注册 -->
+      <form id="form-register" class="auth-form">
+        <label>身份
+          <select id="reg-role">
+            <option value="teacher">教师</option>
+            <option value="student">学生</option>
+            <option value="parent">家长</option>
+          </select>
+        </label>
+        <label>姓名<input type="text" id="reg-name" placeholder="真实姓名" required /></label>
+        <label>手机号<input type="tel" id="reg-phone" placeholder="11位手机号" maxlength="11" required /></label>
+        <label>密码<input type="password" id="reg-pwd" placeholder="6-20位" required /></label>
+        <label>确认密码<input type="password" id="reg-pwd2" placeholder="再次输入密码" required /></label>
+        <div class="reg-extra" id="reg-extra"></div>
+        <button type="submit" class="btn btn-primary">注 册</button>
+        <div class="auth-hint" id="reg-hint"></div>
+      </form>
+
+      <!-- 密码重置 -->
+      <form id="form-reset" class="auth-form">
+        <label>手机号<input type="tel" id="reset-phone" placeholder="注册手机号" maxlength="11" required /></label>
+        <label>新密码<input type="password" id="reset-pwd" placeholder="6-20位" required /></label>
+        <button type="submit" class="btn btn-primary">重 置</button>
+        <div class="auth-hint" id="reset-hint"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 主应用屏 -->
+  <div id="app-screen" class="app-screen hidden">
+    <header class="topbar">
+      <button class="hamburger" id="btn-menu">☰</button>
+      <div class="topbar-title"><span class="logo">📐</span> 小学数学AI助教</div>
+      <div class="topbar-user">
+        <span id="cur-user"></span>
+        <button class="btn btn-ghost" id="btn-logout">退出</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar" id="sidebar"></aside>
+      <main class="content" id="view"></main>
+    </div>
+
+    <nav class="tabbar" id="tabbar"></nav>
+  </div>
+
+  <!-- 模态层 -->
+  <div id="modal-root"></div>
+  <div id="toast-root"></div>
+
+  <script src="js/db.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/teacher.js"></script>
+  <script src="js/student.js"></script>
+  <script src="js/parent.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
