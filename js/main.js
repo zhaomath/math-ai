@@ -43,7 +43,7 @@
     // 初始化云端（未配置则自动降级本地模式）
     try{ await CB.init(); }catch(e){}
     if(CB.enabled){
-      try{ await DB.syncFromCloud(); await CB.ensureAnon(); }catch(e){}
+      try{ await DB.syncFromCloud(); }catch(e){}
     }
     var s=DB.getSession();
     if(s){ var db=DB.get(); var u=DB.byId(db.users, s.uid);

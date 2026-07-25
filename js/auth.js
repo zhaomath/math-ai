@@ -20,19 +20,14 @@
     if(!pwd) return { ok:false, msg:'请输入密码' };
 
     if(cloudMode()){
-      try{
-        await CB.signIn(phone, pwd);            // CloudBase 用户名密码登录
-      }catch(e){
-        var m=(e&&e.message)||'';
-        if(/not exist|不存在|未注册|no such|not found|不存在该用户/i.test(m))
-          return { ok:false, msg:'该手机号未注册，请先注册（或联系教师在教师端导入）' };
-        if(/password|密码/i.test(m)) return { ok:false, msg:'密码错误' };
-        return { ok:false, msg:'登录失败：'+(m||'请检查网络') };
-      }
+      // 云端账号由本应用自行管理（手机号+密码，存于 sync 集合），无需 CloudBase 注册
+      try{ await DB.syncFromCloud(); }catch(e){}
       var db=DB.get();
       var u=DB.byPhone(db.users, phone);
-      if(!u) return { ok:false, msg:'云端账号已存在，但业务资料缺失，请联系教师重新导入' };
+      if(!u) return { ok:false, msg:'该手机号未注册，请先注册（或联系教师在教师端导入）' };
       if(u.role!==role) return { ok:false, msg:'该账号不是'+roleName(role)+'身份，请切换身份登录' };
+      if(!u.pwd){ u.pwd=pwd; DB.save(db); }        // 教师导入未设密码时，首次登录即设置
+      else if(u.pwd!==pwd) return { ok:false, msg:'密码错误' };
       DB.setSession(u);
       return { ok:true, msg:'登录成功', user:u };
     }
@@ -58,28 +53,19 @@
     var exist=DB.byPhone(db.users, d.phone);
 
     if(cloudMode()){
-      // 在 CloudBase 创建/复用账号（手机号即 username）
-      try{
-        await CB.signUp(d.phone, d.pwd);
-      }catch(e){
-        var em=(e&&e.message)||'';
-        if(!/already|已|exist|registered/i.test(em)) return { ok:false, msg:'注册失败：'+(em||'请检查网络') };
-      }
-      var u;
-      if(exist){
-        // 教师已导入：复用同一业务身份（跨设备一致）
-        exist.pwd=d.pwd; DB.save(db); u=exist;
-      }else{
-        var uidv = await CB.getUid();
-        u={ id: uidv||DB.uid(d.role[0]), role:d.role, name:d.name, phone:d.phone, pwd:d.pwd };
-        if(d.role==='student'){ u.studentNo=d.studentNo||('S'+Date.now().toString().slice(-6)); u.grade=3; u.points=0; }
-        if(d.role==='parent'){ u.studentId=null; }
-        if(d.role==='teacher'){ u.school=d.school||''; }
-        db.users.push(u);
-        if(d.role==='student') db.students.push(u);
-        if(d.role==='parent') db.parents.push(u);
-        DB.save(db);
-      }
+      // 云端账号由本应用自行管理：先拉取最新云端数据，再判断手机号是否已存在
+      try{ await DB.syncFromCloud(); }catch(e){}
+      var db=DB.get();
+      var exist=DB.byPhone(db.users, d.phone);
+      if(exist) return { ok:false, msg:'该手机号已注册，请直接登录' };
+      var u={ id:DB.uid(d.role[0]), role:d.role, name:d.name, phone:d.phone, pwd:d.pwd };
+      if(d.role==='student'){ u.studentNo=d.studentNo||('S'+Date.now().toString().slice(-6)); u.grade=3; u.points=0; }
+      if(d.role==='parent'){ u.studentId=null; }
+      if(d.role==='teacher'){ u.school=d.school||''; }
+      db.users.push(u);
+      if(d.role==='student') db.students.push(u);
+      if(d.role==='parent') db.parents.push(u);
+      DB.save(db);
       DB.setSession(u);
       return { ok:true, msg:'注册成功', user:u };
     }
@@ -103,7 +89,12 @@
     if(!validPhone(phone)) return { ok:false, msg:'手机号格式不正确' };
     if(!newPwd || newPwd.length<6) return { ok:false, msg:'新密码至少6位' };
     if(cloudMode()){
-      return { ok:false, msg:'云端账号请在 CloudBase 控制台重置密码，或用同一手机号重新注册' };
+      try{ await DB.syncFromCloud(); }catch(e){}
+      var db=DB.get();
+      var u=DB.byPhone(db.users, phone);
+      if(!u) return { ok:false, msg:'该手机号未注册' };
+      u.pwd=newPwd; DB.save(db);
+      return { ok:true, msg:'密码已重置，请用新密码登录' };
     }
     var db=DB.get();
     var u=DB.byPhone(db.users, phone);

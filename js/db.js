@@ -78,7 +78,6 @@
   async function pushToCloud(db){
     if(!global.CB || !CB.enabled) return;
     try{
-      await CB.ensureAnon();
       var c = CB.coll(SYNC_COLL);
       for(var i=0;i<SYNC_NAMES.length;i++){
         var name = SYNC_NAMES[i];
@@ -92,7 +91,6 @@
   async function syncFromCloud(){
     if(!global.CB || !CB.enabled) return false;
     try{
-      await CB.ensureAnon();
       var c = CB.coll(SYNC_COLL);
       var res = await c.get();
       var docs = (res && res.data) || [];
