@@ -73,17 +73,19 @@
   function byId(arr,id){ for(var i=0;i<arr.length;i++) if(arr[i].id===id) return arr[i]; return null; }
   function byPhone(arr,phone){ for(var i=0;i<arr.length;i++) if(arr[i].phone===phone) return arr[i]; return null; }
   function uniqById(arr){ var m={}, r=[]; (arr||[]).forEach(function(x){ if(x && x.id && !m[x.id]){ m[x.id]=1; r.push(x); } }); return r; }
-  /* 数据自修复：students / parents 未纳入云端同步集合，跨设备拉取后可能为空，
-   * 而 users（含学生/家长身份）是唯一已同步的集合。这里以 users 为权威源，
-   * 把缺失的学生/家长补回 students / parents，保证各端显示一致、概览人数正确。
+  /* 数据自修复：students / parents / class.studentIds 在跨设备拉取后可能不一致，
+   * 而 users 是唯一完整同步的集合。这里以 users 为权威源补齐 students/parents，
+   * 再以 students 为源补齐每个班级的 studentIds，保证概览、班级管理、学情分析一致。
    * 返回 true 表示发生了补齐（需要回写云端）。 */
   function normalize(db){
     if(!db || !Array.isArray(db.users)) return false;
     db.students = db.students || [];
     db.parents = db.parents || [];
+    db.classes = db.classes || [];
     var have = {};
     db.students.concat(db.parents).forEach(function(x){ if(x && x.id) have[x.id]=1; });
     var changed = false;
+    // 1) 从 users 补齐 students / parents
     db.users.forEach(function(u){
       if((u.role==='student' || u.role==='parent') && !have[u.id]){
         if(u.role==='student') db.students.push(u); else db.parents.push(u);
@@ -92,6 +94,16 @@
     });
     db.students = uniqById(db.students);
     db.parents = uniqById(db.parents);
+    // 2) 从 students 补齐 class.studentIds（概览/班级管理依赖它）
+    var stuByClass = {};
+    db.students.forEach(function(s){ if(s && s.classId){ stuByClass[s.classId]=stuByClass[s.classId]||[]; stuByClass[s.classId].push(s.id); } });
+    db.classes.forEach(function(c){
+      if(!c) return;
+      var ids = stuByClass[c.id] || [];
+      var set = {};
+      (c.studentIds||[]).forEach(function(id){ set[id]=1; });
+      ids.forEach(function(id){ if(!set[id]){ (c.studentIds||(c.studentIds=[])).push(id); set[id]=1; changed=true; } });
+    });
     return changed;
   }
 
