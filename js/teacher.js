@@ -370,8 +370,9 @@
     var db=DB.get(); var c=currentClass(); if(!c){ UI.toast('请先创建班级'); return; }
     var body='发布到：<b>'+UI.esc(c.name)+'</b><br><br>作业标题<input id="ph-title" value="AI分层练习"><br><br>类型<select id="ph-type"><option value="分层作业">分层作业（基础/提高/拓展）</option><option value="课堂练习">课堂练习</option></select><br><br><span class="muted">已选 '+bankSel.length+' 题，将作为基础层发布，可在学生端做分层练习。</span>';
     UI.modal({ title:'发布作业', body:body, actions:[
-      {label:'取消',cls:''},{label:'发布',cls:'btn-primary',onClick:function(c2){ var qs=bankSel.map(function(id){return DB.byId(db.questionBank,id);}).filter(Boolean).map(function(q){return {id:DB.uid('hq'),type:q.type,kp:q.kp,stem:q.stem,answer:q.answer,options:q.options,tier:'base'};});
-        db.homework.push({id:DB.uid('hw'),classId:c.id,title:document.getElementById('ph-title').value,grade:c.grade,publishedAt:Date.now(),status:'published',questions:qs}); DB.save(db); bankSel=[]; UI.toast('已发布到'+c.name); c2(); App.go('#/teacher/home'); }}
+      {label:'取消',cls:''},{label:'发布',cls:'btn-primary',onClick:async function(c2){ var qs=bankSel.map(function(id){return DB.byId(db.questionBank,id);}).filter(Boolean).map(function(q){return {id:DB.uid('hq'),type:q.type,kp:q.kp,stem:q.stem,answer:q.answer,options:q.options,tier:'base'};});
+        db.homework.push({id:DB.uid('hw'),classId:c.id,title:document.getElementById('ph-title').value,grade:c.grade,publishedAt:Date.now(),status:'published',questions:qs}); var sync=await DB.save(db); bankSel=[];
+        UI.toast((sync&&sync.ok?'已发布到':'⚠️ 本地已发布，但云端同步失败：')+c.name+(sync&&sync.ok?'':'，请点顶部 🔄 同步重试'), sync&&sync.ok?2600:4200); c2(); App.go('#/teacher/home'); }}
     ]});
   }
   function uniqueKP(){ var s={}; DB.KP.forEach(function(k){ s[k.name]=1; }); return Object.keys(s); }

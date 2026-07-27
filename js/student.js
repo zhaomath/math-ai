@@ -74,7 +74,7 @@
       var ex=document.getElementById('ex-'+i); if(ex) ex.onclick=function(){ AI.voice(AI.explain(q,g)); };
     }
   }
-  function submitHW(hw, answers){
+  async function submitHW(hw, answers){
     var db=DB.get();
     var res=hw.questions.map(function(q,i){ var val=document.getElementById('ans-'+i).value; var g=AI.gradeQuestion(q,val);
       return {qid:q.id,value:val,correct:g.correct,errorType:g.errorType,errorLoc:g.errorLoc,reason:g.reason}; });
@@ -82,8 +82,13 @@
     db.submissions.push({id:DB.uid('sub'),hwId:hw.id,studentId:App.user.id,answers:res,score:score,aiGraded:true,teacherReviewed:false,status:'submitted',submittedAt:Date.now()});
     var stu=DB.byId(db.students,App.user.id); var gain=score>=90?10:score>=60?5:2; stu.points=(stu.points||0)+gain;
     res.filter(function(a){return !a.correct;}).forEach(function(a){ db.wrongBook.push({id:DB.uid('w'),studentId:App.user.id,qid:a.qid,hwId:hw.id,type:'作业',errorType:a.errorType,reason:a.reason,times:1,lastAt:Date.now(),variants:[]}); });
-    DB.save(db);
-    UI.toast('作业提交成功！'+score+'分，+'+gain+'积分');
+    UI.toast('正在保存到云端…', 2000);
+    var sync = await DB.save(db);
+    if(sync && sync.ok){
+      UI.toast('作业提交成功！'+score+'分，+'+gain+'积分（已同步）');
+    } else {
+      UI.toast('⚠️ 作业已保存在本机，但云端同步失败，请点顶部 🔄 同步重试', 4000);
+    }
     App.go('#/student/report');
   }
 
@@ -94,9 +99,9 @@
       '<div class="row end" style="margin-top:12px"><button class="btn btn-primary" id="quiz-submit">交卷</button></div>');
     return set(html, function(){
       qs.forEach(function(q,i){ var inp=document.getElementById('ans-'+i); if(inp) inp.onblur=function(){ liveCheck(q,i,inp.value); }; });
-      document.getElementById('quiz-submit').onclick=function(){ var correct=0; qs.forEach(function(q,i){ var val=document.getElementById('ans-'+i).value; var g2=AI.gradeQuestion(q,val); if(g2.correct) correct++; });
-        var score=Math.round(correct/qs.length*100); var stu=DB.byId(db.students,App.user.id); var gain=correct*2; stu.points=(stu.points||0)+gain; DB.save(db);
-        UI.toast('小测完成：'+score+'分，+'+gain+'积分'); App.render(); };
+      document.getElementById('quiz-submit').onclick=async function(){ var correct=0; qs.forEach(function(q,i){ var val=document.getElementById('ans-'+i).value; var g2=AI.gradeQuestion(q,val); if(g2.correct) correct++; });
+        var score=Math.round(correct/qs.length*100); var stu=DB.byId(db.students,App.user.id); var gain=correct*2; stu.points=(stu.points||0)+gain; var sync=await DB.save(db);
+        UI.toast((sync&&sync.ok?'小测完成：':'⚠️ 小测已保存本机，云端同步失败：')+score+'分，+'+gain+'积分'); App.render(); };
     });
   }
 

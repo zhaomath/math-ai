@@ -48,6 +48,7 @@
     }
     startAutoSync();        // 后台定时从云端拉取并自动重绘，解决"多设备不及时同步"
     renderCloudStatus();   // 在登录页直接显示云端连接状态与失败原因
+    updateSyncHint();
     var s=DB.getSession();
     if(s){ var db=DB.get(); var u=DB.byId(db.users, s.uid);
       if(u){ App.user=u; enterApp(); return; } }
@@ -68,6 +69,7 @@
       try{ await CB.retry(); }catch(e){}
       if(CB.enabled) try{ await DB.syncFromCloud(); }catch(e){}
       renderCloudStatus();
+      updateSyncHint();
     };
     var copyBtn = document.getElementById('btn-copy-err');
     if(copyBtn) copyBtn.onclick = async function(){
@@ -87,23 +89,41 @@
         if(document.querySelector('.modal-mask')) return;   // 弹窗打开时不打断用户
         var r = await DB.syncFromCloud();
         if(r && r.changed && App.user) App.render();          // 有变化才重绘，避免无谓闪烁
+        if(r && r.ok) updateSyncHint();
       }catch(e){}
     }, AUTO_SYNC_MS);
   }
-  // 顶部"🔄 同步"按钮：立即从云端拉取一次，方便手动验证"到底传没传上云端"
+  // 顶部"🔄 同步"按钮：立即从云端拉取一次。
+  // 5 秒内连续点击两次，第二次强制以云端为准（丢弃本地对同步集合的修改），用于紧急恢复。
   function wireSyncBtn(){
     var btn = document.getElementById('btn-sync');
     if(!btn) return;
+    var lastClick = 0, forceHint = false;
     btn.onclick = async function(){
       if(!(global.CB && CB.enabled)){ UI.toast('当前未连接云端（本机模式），无法同步', 2600); return; }
-      var old = btn.textContent; btn.disabled = true; btn.textContent = '同步中…';
+      var now = Date.now();
+      var force = (now - lastClick < 5000);
+      lastClick = now;
+      var old = btn.textContent; btn.disabled = true; btn.textContent = force ? '强制同步中…' : '同步中…';
       try{
-        var r = await DB.syncFromCloud();
+        var r = force ? await DB.forcePullFromCloud() : await DB.syncFromCloud();
         if(r && r.changed && App.user) App.render();
-        UI.toast(r && r.ok ? (r.changed ? '已同步，发现新数据' : '已同步，数据已是最新') : '同步失败，请检查网络', 2600);
+        if(force && r && r.ok){
+          UI.toast(r.changed ? '已强制以云端为准刷新' : '强制同步完成，与云端一致', 2600);
+        } else {
+          UI.toast(r && r.ok ? (r.changed ? '已同步，发现新数据' : '已同步，数据已是最新') : '同步失败：'+((CB.syncError)||'请检查网络'), 3000);
+        }
       }catch(e){ UI.toast('同步失败，请检查网络', 2600); }
-      finally{ btn.disabled = false; btn.textContent = old; }
+      finally{ btn.disabled = false; btn.textContent = old; updateSyncHint(); }
     };
+  }
+  // 在按钮 title 中显示最后同步时间，方便诊断
+  function updateSyncHint(){
+    var btn = document.getElementById('btn-sync');
+    if(!btn) return;
+    var t = localStorage.getItem('mathai_db_v1_last_sync');
+    var base = '点击拉取云端最新数据；5 秒内连点两次强制以云端为准';
+    btn.title = t ? base + '\n最后成功同步：' + new Date(+t).toLocaleString('zh-CN') : base;
   }
 
   function registerSW(){

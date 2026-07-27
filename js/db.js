@@ -46,7 +46,7 @@
   }
   function save(db){
     try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){}
-    pushToCloud(db); // 后台同步，不阻塞 UI
+    return pushToCloud(db); // 后台同步；返回 Promise，关键路径可 await 并提示用户
   }
   function get(){
     var db = load();
@@ -151,8 +151,10 @@
 
   /* ---------- 云端同步 ---------- */
   // 上传：把需同步的集合整体写成云端集合里的独立文档（每次 save 约 5 次调用，极省额度）
+  // 返回 { ok:true/false, details:{name:boolean} }
   async function pushToCloud(db){
-    if(!global.CB || !CB.enabled) return;
+    if(!global.CB || !CB.enabled) return {ok:false, details:{}};
+    var result = {ok:true, details:{}};
     try{
       stampUpdated(db);   // 给每条记录打更新时间戳，供冲突仲裁
       var c = CB.coll(SYNC_COLL);
@@ -166,16 +168,23 @@
           var merged = mergeArr(data, cloudData);       // 按记录合并：保留其它端的提交，补入本地新提交
           await c.doc(name).set({ name:name, data:merged, ts:Date.now() });
           db[name] = merged;                            // 把合并结果回填内存，保持一致
+          result.details[name]=true;
         }catch(e){
-          // 读云端失败（网络/权限）→ 退化成直接写入本地数据，至少不丢本次编辑
-          try{ await c.doc(name).set({ name:name, data:data, ts:Date.now() }); }catch(e2){}
+          // 读云端失败时，宁可本次不上传该集合，也绝不用本地数据直接覆盖云端，
+          // 否则可能把其它设备已同步的数据整体清空（这是本次 bug 的核心原因之一）。
+          result.details[name]=false; result.ok=false;
+          console.warn('[CloudBase] 同步集合「'+name+'」读云端失败，跳过写入避免覆盖：', e && e.message);
         }
       }
-    }catch(e){ if(global.CB) CB.syncError=(e&&e.message)||'上传失败'; console.warn('[CloudBase] 同步上传失败：', e && e.message); }
+      if(!result.ok) CB.syncError='部分数据未同步到云端，请检查网络后重试';
+      return result;
+    }catch(e){ if(global.CB) CB.syncError=(e&&e.message)||'上传失败'; console.warn('[CloudBase] 同步上传失败：', e && e.message); return {ok:false, details:{}}; }
   }
   // 下载：启动时 / 定时拉取云端快照，与本地按记录合并（不再整集合覆盖，避免踩掉刚提交的内容）
-  // 返回 { ok, changed } —— changed 表示本次拉取是否真的带来了新数据（供 UI 决定要不要重绘）
-  async function syncFromCloud(){
+  // opts.force=true 表示强制以云端为准，丢弃本地对同步集合的修改（用于紧急恢复被本地错误数据覆盖的情况）
+  // 返回 { ok, changed }
+  async function syncFromCloud(opts){
+    opts = opts || {};
     if(!global.CB || !CB.enabled) return {ok:false, changed:false};
     try{
       var c = CB.coll(SYNC_COLL);
@@ -185,7 +194,11 @@
       var before = localStorage.getItem(KEY);            // 合并前快照，用于判断是否有变化
       docs.forEach(function(d){
         if(d && SYNC_NAMES.indexOf(d.name)>=0 && Array.isArray(d.data)){
-          db[d.name] = mergeArr(db[d.name], d.data);   // 云端 → 本地 按记录合并（本地未同步的新提交不丢）
+          if(opts.force){
+            db[d.name] = d.data;                         // 强制以云端为准
+          } else {
+            db[d.name] = mergeArr(db[d.name], d.data);   // 云端 → 本地 按记录合并（本地未同步的新提交不丢）
+          }
         }
       });
       var normalizeChanged = normalize(db);            // 以 users 为权威源补齐 students / parents
@@ -194,8 +207,13 @@
       if(changed) localStorage.setItem(KEY, after);     // 仅在真有变化时写回，避免无谓写入与无限重绘
       if(normalizeChanged) pushToCloud(db);             // 把补齐后的数据回写云端，保证各端一致
       CB._lastSyncAt = Date.now();
+      localStorage.setItem(KEY+'_last_sync', String(CB._lastSyncAt));
       return {ok:true, changed:changed};
     }catch(e){ if(global.CB) CB.syncError=(e&&e.message)||'下载失败'; console.warn('[CloudBase] 同步下载失败：', e && e.message); return {ok:false, changed:false}; }
+  }
+  // 强制以云端为准拉取一次（丢弃本地对同步集合的修改），用于修复本地错误数据顽固覆盖云端的问题
+  async function forcePullFromCloud(){
+    return syncFromCloud({force:true});
   }
 
   /* ---------- 知识点题库（前端生成，不云端同步） ---------- */
@@ -278,7 +296,7 @@
   global.DB = {
     KEY:KEY, KP:KP,
     get:get, save:save, reset:reset, seed:seed, emptyDb:emptyDb,
-    syncFromCloud:syncFromCloud, pushToCloud:pushToCloud,
+    syncFromCloud:syncFromCloud, pushToCloud:pushToCloud, forcePullFromCloud:forcePullFromCloud,
     getSession:getSession, setSession:setSession, clearSession:clearSession,
     uid:uid, byId:byId, byPhone:byPhone, rand:rand, fix:fix, findKP:findKP,
     SYNC_COLL:SYNC_COLL, SYNC_NAMES:SYNC_NAMES
