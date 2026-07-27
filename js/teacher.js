@@ -18,9 +18,10 @@
   }
   function classSelector(c){
     var list=myClasses();
-    if(list.length<=1) return '<div class="row" style="margin-bottom:8px"><b>班级：'+UI.esc((c||{}).name||'')+'</b></div>';
+    var idInfo = c ? ' <span class="muted" style="font-size:12px">(ID:'+c.id.slice(-6)+')</span>' : '';
+    if(list.length<=1) return '<div class="row" style="margin-bottom:8px"><b>班级：'+UI.esc((c||{}).name||'')+'</b>'+idInfo+'</div>';
     var opts=list.map(function(x){ return '<option value="'+x.id+'"'+(x.id===App.currentClassId?' selected':'')+'>'+UI.esc(x.name)+'</option>'; }).join('');
-    return '<div class="row" style="margin-bottom:8px"><label style="flex:1">切换班级 <select id="class-select">'+opts+'</select></label></div>';
+    return '<div class="row" style="margin-bottom:8px"><label style="flex:1">切换班级 <select id="class-select">'+opts+'</select></label>'+idInfo+'</div>';
   }
   // 双重保险取学生：班级 studentIds 数组 + 学生记录里的 classId
   function studentsOf(c,db){

@@ -157,6 +157,8 @@
       return '云端拒绝写入（权限不足）：请在 CloudBase 控制台把 sync 集合权限改为「所有用户可读写」或安全规则 {"read":"auth!=null","write":"auth!=null"}。当前很可能是"仅创建者可写"，导致其它设备写不进。';
     if(/network|timeout|超时|econn|offline|disconnected|fetch/.test(raw))
       return '网络异常，云端写入失败，请检查网络后点 🔄 同步重试。';
+    if(/duplicate|e11000|dup key/.test(raw))
+      return '云端写入被拒绝：当前设备没有「更新已有文档」的权限（仅能创建新文档）。请在 CloudBase 控制台把 sync 集合权限改成「所有用户可读写」，并确认修改后点击「应用/保存」。';
     return '云端写入失败：' + ((e && (e.message || e.errMsg)) || '未知原因');
   }
 
@@ -228,15 +230,25 @@
   async function forcePullFromCloud(){
     return syncFromCloud({force:true});
   }
-  // 云端写入自检：向 sync 集合写一个测试文档，确诊"本设备到底能不能写云端"
+  // 云端写入自检：分别测试「创建新文档」和「更新已有文档」两种权限
+  // sync 集合的核心同步需要 update 已有文档，若仅允许 create 会出现 duplicate key 错误。
   // 返回 { ok, msg }——用于一键定位"仅创建者可写"这类权限问题
   async function testCloudWrite(){
     if(!global.CB || !CB.enabled) return {ok:false, msg:'当前是本机模式，未连接云端'};
+    var c = CB.coll(SYNC_COLL);
+    var testId = '_writetest_' + Date.now();
     try{
-      await CB.coll(SYNC_COLL).doc('_writetest').set({ name:'_writetest', ts:Date.now(), by:'self-check' });
-      return {ok:true, msg:'本设备可正常写入云端'};
+      // 1) 测试 create 权限：新建一个随机 id 的测试文档
+      await c.doc(testId).set({ name:testId, ts:Date.now(), by:'self-check' });
+      // 2) 测试 update 权限：更新这个刚创建的文档
+      try{
+        await c.doc(testId).set({ name:testId, ts:Date.now(), by:'self-check', updated:true });
+        return {ok:true, msg:'本设备可正常创建并更新云端文档'};
+      }catch(e2){
+        return {ok:false, msg:'可创建新文档，但无法更新已有文档：' + friendlyWriteErr(e2) + '（sync 集合权限未放开 update）'};
+      }
     }catch(e){
-      return {ok:false, msg:friendlyWriteErr(e)};
+      return {ok:false, msg:'无法创建云端文档：' + friendlyWriteErr(e)};
     }
   }
 

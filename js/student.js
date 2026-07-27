@@ -22,7 +22,7 @@
     var r=AI.studentReport(App.user.id);
     var u=unreviewed();
     var c=myClass();
-    var clsInfo = c ? '<span class="muted">班级：'+UI.esc(c.name)+'</span>' : '<span class="muted" style="color:#d9534f">未加入班级，请联系教师导入</span>';
+    var clsInfo = c ? '<span class="muted">班级：'+UI.esc(c.name)+' <span style="font-size:11px">(ID:'+c.id.slice(-6)+')</span></span>' : '<span class="muted" style="color:#d9534f">未加入班级，请联系教师导入</span>';
     var html=card('👋 '+App.user.name+'，加油！ <span class="muted" style="font-size:12px">(ID:'+(App.user.id||'').slice(-6)+')</span>', clsInfo + grid4([
       stat(r.points,'我的积分'), stat(u.length,'待做作业'),
       stat(r.wrongCount,'错题数'), stat(r.avg==null?'—':r.avg.toFixed(0)+'%','平均正确率')
