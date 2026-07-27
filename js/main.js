@@ -238,7 +238,9 @@
 
   /* ---------- 账号设置（密码重置 / 注销） ---------- */
   function openSettings(){
-    var body='<div style="margin-bottom:10px">修改密码</div>原密码 <input id="st-old" type="password"><br><br>新密码 <input id="st-new" type="password" placeholder="6-20位"><br><br><button class="btn btn-primary" id="st-save">保存密码</button>'+
+    var u=App.user;
+    var body='<p class="muted">身份：'+Auth.roleName(u.role)+' | 手机号：'+(u.phone||'—')+' | ID：'+(u.id||'—')+'</p>'+
+      '<div style="margin-bottom:10px">修改密码</div>原密码 <input id="st-old" type="password"><br><br>新密码 <input id="st-new" type="password" placeholder="6-20位"><br><br><button class="btn btn-primary" id="st-save">保存密码</button>'+
       '<hr style="margin:16px 0;border:none;border-top:1px solid var(--line)"><div style="margin-bottom:8px">账号注销</div><span class="muted">注销将删除您的账号及关联数据，不可恢复。</span><br><br><button class="btn btn-danger" id="st-del">注销账号</button>';
     UI.modal({ title:'账号设置 · '+App.user.name, body:body, actions:[{label:'关闭',cls:''}], dismissable:true });
     document.getElementById('st-save').onclick=function(){ var db=DB.get(); var u=DB.byId(db.users,App.user.id);

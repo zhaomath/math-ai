@@ -160,12 +160,29 @@
       var name=f[0], phone=f[1], stuNo=f[2]||'', pPhone=f[3]||'';
       if(!name){ skipped.push('第'+(idx+1)+'行：缺少姓名'); return; }
       if(!Auth.validPhone(phone)){ skipped.push('第'+(idx+1)+'行「'+name+'」：手机号格式不正确（需11位、以1开头）'); return; }
-      if(seenPhones[phone] || DB.byPhone(db.users, phone)){ skipped.push('第'+(idx+1)+'行「'+name+'」：手机号 '+phone+' 已存在，已跳过'); return; }
+      if(seenPhones[phone]){ skipped.push('第'+(idx+1)+'行「'+name+'」：本批重复手机号 '+phone); return; }
       seenPhones[phone]=1;
-      if(!stuNo) stuNo='S'+String(Date.now()).slice(-6)+idx;
-      var stu={ id:DB.uid('s'), role:'student', name:name, phone:phone, pwd:'123456',
-        studentNo:stuNo, classId:c.id, parentId:null, points:0, grade:c.grade };
-      db.users.push(stu); db.students.push(stu); c.studentIds=c.studentIds||[]; c.studentIds.push(stu.id);
+
+      var existing = DB.byPhone(db.users, phone);
+      var stu;
+      if(existing && existing.role==='student'){
+        // 学生已存在（可能自注册过）：复用该账号，加入当前班级，不再新建同名不同 id 的账号
+        stu = existing;
+        stu.name = name;                       // 教师导入时以教师填的姓名为准
+        if(stuNo) stu.studentNo = stuNo;       // 教师填的学号也更新
+        if(!stu.classId) stu.classId = c.id;   // 若未绑定班级则绑定
+        else if(stu.classId !== c.id){ skipped.push('第'+(idx+1)+'行「'+name+'」：该学生已在其它班级'); return; }
+      } else if(existing){
+        skipped.push('第'+(idx+1)+'行「'+name+'」：手机号 '+phone+' 已被'+Auth.roleName(existing.role)+'占用'); return;
+      } else {
+        if(!stuNo) stuNo='S'+String(Date.now()).slice(-6)+idx;
+        stu={ id:DB.uid('s'), role:'student', name:name, phone:phone, pwd:'123456',
+          studentNo:stuNo, classId:c.id, parentId:null, points:0, grade:c.grade };
+        db.users.push(stu); db.students.push(stu);
+      }
+      // 确保该学生在当前班级的 studentIds 中
+      c.studentIds=c.studentIds||[];
+      if(c.studentIds.indexOf(stu.id)<0){ c.studentIds.push(stu.id); }
       added++;
       // 家长：留空自动生成，已存在则复用
       var parentPhone = pPhone || ('139'+String(DB.rand(10000000,99999999)));

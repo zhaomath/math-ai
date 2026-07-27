@@ -49,15 +49,19 @@
     if(!d.pwd || d.pwd.length<6) return { ok:false, msg:'密码至少6位' };
     if(d.pwd!==d.pwd2) return { ok:false, msg:'两次密码不一致' };
 
+    // 云端模式下，注册前必须拉取最新云端数据，防止覆盖教师已导入的账号
+    if(cloudMode()){
+      try{ await DB.syncFromCloud(); }catch(e){}
+    }
     var db=DB.get();
     var exist=DB.byPhone(db.users, d.phone);
 
     if(cloudMode()){
-      // 云端账号由本应用自行管理：先拉取最新云端数据，再判断手机号是否已存在
-      try{ await DB.syncFromCloud(); }catch(e){}
-      var db=DB.get();
-      var exist=DB.byPhone(db.users, d.phone);
-      if(exist) return { ok:false, msg:'该手机号已注册，请直接登录' };
+      // 云端账号由本应用自行管理，手机号全局唯一：教师导入的账号与学生自注册账号必须一致
+      if(exist){
+        if(exist.role===d.role) return { ok:false, msg:'该手机号已注册，请直接登录。如忘记密码，可用“重置密码”。' };
+        return { ok:false, msg:'该手机号已被'+roleName(exist.role)+'占用，无法注册为'+roleName(d.role)+'。' };
+      }
       var u={ id:DB.uid(d.role[0]), role:d.role, name:d.name, phone:d.phone, pwd:d.pwd };
       if(d.role==='student'){ u.studentNo=d.studentNo||('S'+Date.now().toString().slice(-6)); u.grade=3; u.points=0; }
       if(d.role==='parent'){ u.studentId=null; }
