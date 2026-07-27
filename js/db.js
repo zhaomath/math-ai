@@ -45,6 +45,8 @@
     try{ var s=localStorage.getItem(KEY); return s?JSON.parse(s):null; }catch(e){ return null; }
   }
   function save(db){
+    var prev = load();                 // 修改前快照：用于判断哪些记录真的变了
+    stampChanged(db, prev);            // 只给变化的记录刷新 updatedAt（修复积分被旧数据覆盖）
     try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){}
     return pushToCloud(db); // 后台同步；返回 Promise，关键路径可 await 并提示用户
   }
@@ -108,12 +110,35 @@
       return [];
     }catch(e){ return []; }
   }
-  // 保存时给所有同步集合的记录打 updatedAt，供「同 id 取较新者」仲裁；缺失时间戳按 0 处理（本地优先）
-  function stampUpdated(db){
+  // v2.22 修复：只给「内容真的变了」的记录刷新 updatedAt。
+  // 旧版 stampUpdated 每次 save 都把所有记录刷成最新时间戳，等于每台设备都宣称
+  // "我的全部数据最新"，last-writer-wins 仲裁失效——别的设备上的旧积分会反过来
+  // 覆盖新积分（积分不同步的根因之一）。
+  function stripTs(r){ var c={}; for(var k in r){ if(k!=='updatedAt') c[k]=r[k]; } return JSON.stringify(c); }
+  function stampChanged(db, prev){
+    var now = Date.now();
     SYNC_NAMES.forEach(function(name){
-      var arr = db[name];
-      if(Array.isArray(arr)) arr.forEach(function(r){ if(r && r.id) r.updatedAt = Date.now(); });
+      var prevMap = {};
+      ((prev && prev[name]) || []).forEach(function(r){ if(r && r.id) prevMap[r.id] = r; });
+      (db[name] || []).forEach(function(r){
+        if(!r || !r.id) return;
+        var p = prevMap[r.id];
+        if(!p){ if(!r.updatedAt) r.updatedAt = now; return; }          // 新增记录
+        if(stripTs(p) !== stripTs(r)) r.updatedAt = now;               // 内容变了才刷新戳
+        else if(!r.updatedAt && p.updatedAt) r.updatedAt = p.updatedAt; // 没变则保留原戳
+      });
     });
+  }
+  /* 加积分的唯一入口（v2.22）：同时更新 users（云端同步的权威集合）与 students（本地视图）。
+   * 旧代码只写 db.students，而云端只同步 users → 积分永远上不了云、各端不一致。 */
+  function addPoints(db, sid, gain){
+    var u = byId(db.users || [], sid);
+    var s = byId(db.students || [], sid);
+    var next = (((u && u.points) != null ? u.points : (s && s.points)) || 0) + gain;
+    var now = Date.now();
+    if(u){ u.points = next; u.updatedAt = now; }
+    if(s && s !== u){ s.points = next; s.updatedAt = now; }
+    return next;
   }
   /* 数据自修复：students / parents / class.studentIds 在跨设备拉取后可能不一致，
    * 而 users 是唯一完整同步的集合。这里以 users 为权威源补齐 students/parents，
@@ -136,6 +161,23 @@
     });
     db.students = uniqById(db.students);
     db.parents = uniqById(db.parents);
+    // 1.5) 积分自愈（v2.22）：users 是云端同步的权威集合，students 是本地视图，
+    // 二者经 JSON 序列化后已是两份拷贝。旧代码只把积分加在 students 上导致上不了云。
+    // 积分只增不减 → 同一学生取两边较大值并双向对齐，把丢在本地的积分找回来。
+    var stuMap = {};
+    db.students.forEach(function(s){ if(s && s.id) stuMap[s.id]=s; });
+    db.users.forEach(function(u){
+      if(u.role!=='student') return;
+      var s = stuMap[u.id];
+      if(!s || s===u) return;
+      var up = u.points||0, sp = s.points||0;
+      if(up !== sp){
+        var mx = Math.max(up, sp);
+        u.points = mx; s.points = mx;
+        u.updatedAt = Date.now(); s.updatedAt = u.updatedAt;
+        changed = true;
+      }
+    });
     // 2) 从 students 补齐 class.studentIds（概览/班级管理依赖它）
     var stuByClass = {};
     db.students.forEach(function(s){ if(s && s.classId){ stuByClass[s.classId]=stuByClass[s.classId]||[]; stuByClass[s.classId].push(s.id); } });
@@ -169,7 +211,7 @@
     if(!global.CB || !CB.enabled) return {ok:false, details:{}};
     var result = {ok:true, details:{}};
     try{
-      stampUpdated(db);   // 给每条记录打更新时间戳，供冲突仲裁
+      // 时间戳已在 save() 里按「内容是否变化」精准打好，这里不再全量刷新（v2.22）
       var c = CB.coll(SYNC_COLL);
       for(var i=0;i<SYNC_NAMES.length;i++){
         var name = SYNC_NAMES[i];
@@ -334,7 +376,7 @@
     get:get, save:save, reset:reset, seed:seed, emptyDb:emptyDb,
     syncFromCloud:syncFromCloud, pushToCloud:pushToCloud, forcePullFromCloud:forcePullFromCloud, testCloudWrite:testCloudWrite,
     getSession:getSession, setSession:setSession, clearSession:clearSession,
-    uid:uid, byId:byId, byPhone:byPhone, rand:rand, fix:fix, findKP:findKP,
+    uid:uid, byId:byId, byPhone:byPhone, rand:rand, fix:fix, findKP:findKP, addPoints:addPoints,
     SYNC_COLL:SYNC_COLL, SYNC_NAMES:SYNC_NAMES
   };
 })(window);

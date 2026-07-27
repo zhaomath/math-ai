@@ -294,7 +294,7 @@
     db.submissions.push({ id:DB.uid('sub'), hwId:state.hw.id, studentId:state.stu.id, answers:answers, score:score,
       aiGraded:true, teacherReviewed:true, status:'reviewed', submittedAt:Date.now() });
     // 积分 & 错题库
-    var stu=DB.byId(db.students,state.stu.id); stu.points=(stu.points||0)+ (score>=90?10:score>=60?5:2);
+    var stu=DB.byId(db.students,state.stu.id)||DB.byId(db.users,state.stu.id); DB.addPoints(db, state.stu.id, (score>=90?10:score>=60?5:2)); // v2.22
     answers.filter(function(a){return !a.correct;}).forEach(function(a){
       db.wrongBook.push({ id:DB.uid('w'), studentId:stu.id, qid:a.qid, hwId:state.hw.id, type:'作业',
         errorType:a.errorType, reason:a.reason, times:1, lastAt:Date.now(), variants:[] });

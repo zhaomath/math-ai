@@ -80,7 +80,7 @@
       return {qid:q.id,value:val,correct:g.correct,errorType:g.errorType,errorLoc:g.errorLoc,reason:g.reason}; });
     var correct=res.filter(function(a){return a.correct;}).length; var score=Math.round(correct/res.length*100);
     db.submissions.push({id:DB.uid('sub'),hwId:hw.id,studentId:App.user.id,answers:res,score:score,aiGraded:true,teacherReviewed:false,status:'submitted',submittedAt:Date.now()});
-    var stu=DB.byId(db.students,App.user.id); var gain=score>=90?10:score>=60?5:2; stu.points=(stu.points||0)+gain;
+    var gain=score>=90?10:score>=60?5:2; DB.addPoints(db, App.user.id, gain); // v2.22：同时写 users（云端权威）与 students
     res.filter(function(a){return !a.correct;}).forEach(function(a){ db.wrongBook.push({id:DB.uid('w'),studentId:App.user.id,qid:a.qid,hwId:hw.id,type:'作业',errorType:a.errorType,reason:a.reason,times:1,lastAt:Date.now(),variants:[]}); });
     UI.toast('正在保存到云端…', 2000);
     var sync = await DB.save(db);
@@ -100,7 +100,7 @@
     return set(html, function(){
       qs.forEach(function(q,i){ var inp=document.getElementById('ans-'+i); if(inp) inp.onblur=function(){ liveCheck(q,i,inp.value); }; });
       document.getElementById('quiz-submit').onclick=async function(){ var correct=0; qs.forEach(function(q,i){ var val=document.getElementById('ans-'+i).value; var g2=AI.gradeQuestion(q,val); if(g2.correct) correct++; });
-        var score=Math.round(correct/qs.length*100); var stu=DB.byId(db.students,App.user.id); var gain=correct*2; stu.points=(stu.points||0)+gain; var sync=await DB.save(db);
+        var score=Math.round(correct/qs.length*100); var gain=correct*2; DB.addPoints(db, App.user.id, gain); var sync=await DB.save(db);
         UI.toast(sync&&sync.ok ? ('小测完成：'+score+'分，+'+gain+'积分') : ('⚠️ 小测已保存本机，云端同步失败：'+((sync&&sync.errMsg)||'请点顶部 🔄 同步重试')), sync&&sync.ok?2600:7000); App.render(); };
     });
   }
