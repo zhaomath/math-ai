@@ -108,10 +108,14 @@
       try{
         var r = force ? await DB.forcePullFromCloud() : await DB.syncFromCloud();
         if(r && r.changed && App.user) App.render();
-        if(force && r && r.ok){
-          UI.toast(r.changed ? '已强制以云端为准刷新' : '强制同步完成，与云端一致', 2600);
+        // 每次手动同步都顺带做一次「云端写入自检」——确诊本设备能否写云端（权限问题一次看清）
+        var w = await DB.testCloudWrite();
+        if(!w.ok){
+          UI.toast('⚠️ 拉取成功，但本设备无法写入云端！\n' + w.msg, 8000);
+        } else if(force && r && r.ok){
+          UI.toast(r.changed ? '已强制以云端为准刷新（写入自检 ✅）' : '强制同步完成，与云端一致（写入自检 ✅）', 3000);
         } else {
-          UI.toast(r && r.ok ? (r.changed ? '已同步，发现新数据' : '已同步，数据已是最新') : '同步失败：'+((CB.syncError)||'请检查网络'), 3000);
+          UI.toast(r && r.ok ? (r.changed ? '已同步，发现新数据（写入自检 ✅）' : '已同步，数据已是最新（写入自检 ✅）') : '同步失败：'+((CB.syncError)||'请检查网络'), 3000);
         }
       }catch(e){ UI.toast('同步失败，请检查网络', 2600); }
       finally{ btn.disabled = false; btn.textContent = old; updateSyncHint(); }

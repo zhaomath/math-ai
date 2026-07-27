@@ -149,6 +149,17 @@
     return changed;
   }
 
+  /* 把云端写入失败的原始报错翻译成可操作的中文（最常见根因：sync 集合权限是"仅创建者可写"，
+   * 每台设备匿名身份不同 → 其它设备读得到写不进 → 提交作业永远上不了云） */
+  function friendlyWriteErr(e){
+    var raw = ((e && (e.message || e.errMsg || e.error || '')) + ' ' + (e && e.code ? String(e.code) : '')).toLowerCase();
+    if(/permission|denied|unauthorized|鉴权|无权限|access denied|not authorized|write.*forbid|forbidden|database_permission/.test(raw))
+      return '云端拒绝写入（权限不足）：请在 CloudBase 控制台把 sync 集合权限改为「所有用户可读写」或安全规则 {"read":"auth!=null","write":"auth!=null"}。当前很可能是"仅创建者可写"，导致其它设备写不进。';
+    if(/network|timeout|超时|econn|offline|disconnected|fetch/.test(raw))
+      return '网络异常，云端写入失败，请检查网络后点 🔄 同步重试。';
+    return '云端写入失败：' + ((e && (e.message || e.errMsg)) || '未知原因');
+  }
+
   /* ---------- 云端同步 ---------- */
   // 上传：把需同步的集合整体写成云端集合里的独立文档（每次 save 约 5 次调用，极省额度）
   // 返回 { ok:true/false, details:{name:boolean} }
@@ -173,10 +184,12 @@
           // 读云端失败时，宁可本次不上传该集合，也绝不用本地数据直接覆盖云端，
           // 否则可能把其它设备已同步的数据整体清空（这是本次 bug 的核心原因之一）。
           result.details[name]=false; result.ok=false;
-          console.warn('[CloudBase] 同步集合「'+name+'」读云端失败，跳过写入避免覆盖：', e && e.message);
+          result.errMsg = friendlyWriteErr(e);          // 记录真实原因，供 UI 展示
+          result.rawErr = (e && (e.message || e.errMsg || String(e))) || '';
+          console.warn('[CloudBase] 同步集合「'+name+'」写入失败：', e && e.message, e);
         }
       }
-      if(!result.ok) CB.syncError='部分数据未同步到云端，请检查网络后重试';
+      if(!result.ok) CB.syncError = result.errMsg || '部分数据未同步到云端，请检查网络后重试';
       return result;
     }catch(e){ if(global.CB) CB.syncError=(e&&e.message)||'上传失败'; console.warn('[CloudBase] 同步上传失败：', e && e.message); return {ok:false, details:{}}; }
   }
@@ -214,6 +227,17 @@
   // 强制以云端为准拉取一次（丢弃本地对同步集合的修改），用于修复本地错误数据顽固覆盖云端的问题
   async function forcePullFromCloud(){
     return syncFromCloud({force:true});
+  }
+  // 云端写入自检：向 sync 集合写一个测试文档，确诊"本设备到底能不能写云端"
+  // 返回 { ok, msg }——用于一键定位"仅创建者可写"这类权限问题
+  async function testCloudWrite(){
+    if(!global.CB || !CB.enabled) return {ok:false, msg:'当前是本机模式，未连接云端'};
+    try{
+      await CB.coll(SYNC_COLL).doc('_writetest').set({ name:'_writetest', ts:Date.now(), by:'self-check' });
+      return {ok:true, msg:'本设备可正常写入云端'};
+    }catch(e){
+      return {ok:false, msg:friendlyWriteErr(e)};
+    }
   }
 
   /* ---------- 知识点题库（前端生成，不云端同步） ---------- */
@@ -296,7 +320,7 @@
   global.DB = {
     KEY:KEY, KP:KP,
     get:get, save:save, reset:reset, seed:seed, emptyDb:emptyDb,
-    syncFromCloud:syncFromCloud, pushToCloud:pushToCloud, forcePullFromCloud:forcePullFromCloud,
+    syncFromCloud:syncFromCloud, pushToCloud:pushToCloud, forcePullFromCloud:forcePullFromCloud, testCloudWrite:testCloudWrite,
     getSession:getSession, setSession:setSession, clearSession:clearSession,
     uid:uid, byId:byId, byPhone:byPhone, rand:rand, fix:fix, findKP:findKP,
     SYNC_COLL:SYNC_COLL, SYNC_NAMES:SYNC_NAMES

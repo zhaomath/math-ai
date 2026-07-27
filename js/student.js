@@ -87,7 +87,7 @@
     if(sync && sync.ok){
       UI.toast('作业提交成功！'+score+'分，+'+gain+'积分（已同步）');
     } else {
-      UI.toast('⚠️ 作业已保存在本机，但云端同步失败，请点顶部 🔄 同步重试', 4000);
+      UI.toast('⚠️ 作业已保存在本机，云端同步失败：'+((sync&&sync.errMsg)||'未知原因，请点顶部 🔄 同步重试'), 7000);
     }
     App.go('#/student/report');
   }
@@ -101,7 +101,7 @@
       qs.forEach(function(q,i){ var inp=document.getElementById('ans-'+i); if(inp) inp.onblur=function(){ liveCheck(q,i,inp.value); }; });
       document.getElementById('quiz-submit').onclick=async function(){ var correct=0; qs.forEach(function(q,i){ var val=document.getElementById('ans-'+i).value; var g2=AI.gradeQuestion(q,val); if(g2.correct) correct++; });
         var score=Math.round(correct/qs.length*100); var stu=DB.byId(db.students,App.user.id); var gain=correct*2; stu.points=(stu.points||0)+gain; var sync=await DB.save(db);
-        UI.toast((sync&&sync.ok?'小测完成：':'⚠️ 小测已保存本机，云端同步失败：')+score+'分，+'+gain+'积分'); App.render(); };
+        UI.toast(sync&&sync.ok ? ('小测完成：'+score+'分，+'+gain+'积分') : ('⚠️ 小测已保存本机，云端同步失败：'+((sync&&sync.errMsg)||'请点顶部 🔄 同步重试')), sync&&sync.ok?2600:7000); App.render(); };
     });
   }
 

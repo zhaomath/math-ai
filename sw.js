@@ -1,7 +1,7 @@
 /* =========================================================
  * sw.js —— Service Worker：让 PWA 可离线使用
  * ========================================================= */
-const CACHE_NAME = 'mathai-v7';
+const CACHE_NAME = 'mathai-v8';
 const ASSETS = [
   './',
   './index.html',

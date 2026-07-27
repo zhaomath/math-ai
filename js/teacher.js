@@ -372,7 +372,7 @@
     UI.modal({ title:'发布作业', body:body, actions:[
       {label:'取消',cls:''},{label:'发布',cls:'btn-primary',onClick:async function(c2){ var qs=bankSel.map(function(id){return DB.byId(db.questionBank,id);}).filter(Boolean).map(function(q){return {id:DB.uid('hq'),type:q.type,kp:q.kp,stem:q.stem,answer:q.answer,options:q.options,tier:'base'};});
         db.homework.push({id:DB.uid('hw'),classId:c.id,title:document.getElementById('ph-title').value,grade:c.grade,publishedAt:Date.now(),status:'published',questions:qs}); var sync=await DB.save(db); bankSel=[];
-        UI.toast((sync&&sync.ok?'已发布到':'⚠️ 本地已发布，但云端同步失败：')+c.name+(sync&&sync.ok?'':'，请点顶部 🔄 同步重试'), sync&&sync.ok?2600:4200); c2(); App.go('#/teacher/home'); }}
+        UI.toast(sync&&sync.ok ? ('已发布到'+c.name) : ('⚠️ 本地已发布，云端同步失败：'+((sync&&sync.errMsg)||'请点顶部 🔄 同步重试')), sync&&sync.ok?2600:7000); c2(); App.go('#/teacher/home'); }}
     ]});
   }
   function uniqueKP(){ var s={}; DB.KP.forEach(function(k){ s[k.name]=1; }); return Object.keys(s); }
