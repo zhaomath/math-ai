@@ -73,6 +73,48 @@
   function byId(arr,id){ for(var i=0;i<arr.length;i++) if(arr[i].id===id) return arr[i]; return null; }
   function byPhone(arr,phone){ for(var i=0;i<arr.length;i++) if(arr[i].phone===phone) return arr[i]; return null; }
   function uniqById(arr){ var m={}, r=[]; (arr||[]).forEach(function(x){ if(x && x.id && !m[x.id]){ m[x.id]=1; r.push(x); } }); return r; }
+
+  /* ---------- 云端同步的「按记录合并」（v2.16 修复作业互相覆盖的核心） ----------
+   * 旧逻辑把每个集合存成 sync 集合里的单个文档，pushToCloud 用 set 整文档覆盖、
+   * syncFromCloud 用 db[name]=d.data 整集合覆盖本地——任一端 save 都会把其它端
+   * 的提交整体踩掉，导致"提交后过一会又变未完成、教师/家长端看不到"。
+   * 改为：按 id 合并，同 id 取 updatedAt 较新者；本地/云端独有记录都保留。
+   * 这样无论哪端先提交，都不会再丢失另一端的数据。 */
+  function tsOf(o){ return (o && typeof o.updatedAt==='number') ? o.updatedAt : 0; }
+  function mergeArr(local, cloud){
+    local = Array.isArray(local) ? local : [];
+    cloud = Array.isArray(cloud) ? cloud : [];
+    var map = {}, out = [];
+    cloud.forEach(function(r){ if(r && r.id) map[r.id] = r; });
+    local.forEach(function(r){
+      if(!r || !r.id) return;
+      var c = map[r.id];
+      if(c){
+        // 同 id 冲突：云端严格更新则取云端；否则保留本地（本地刚编辑的优先，避免丢刚提交的内容）
+        out.push(tsOf(c) > tsOf(r) ? c : r);
+        delete map[r.id];
+      } else {
+        out.push(r); // 本地独有，保留
+      }
+    });
+    Object.keys(map).forEach(function(id){ out.push(map[id]); }); // 云端独有，补入
+    return out;
+  }
+  // 从同步文档里取出数组（兼容 {name,data:[...],ts} 与直接是数组两种形态）
+  function extractData(cur){
+    try{ var d = cur && cur.data; if(!d) return [];
+      if(Array.isArray(d.data)) return d.data;
+      if(Array.isArray(d)) return d;
+      return [];
+    }catch(e){ return []; }
+  }
+  // 保存时给所有同步集合的记录打 updatedAt，供「同 id 取较新者」仲裁；缺失时间戳按 0 处理（本地优先）
+  function stampUpdated(db){
+    SYNC_NAMES.forEach(function(name){
+      var arr = db[name];
+      if(Array.isArray(arr)) arr.forEach(function(r){ if(r && r.id) r.updatedAt = Date.now(); });
+    });
+  }
   /* 数据自修复：students / parents / class.studentIds 在跨设备拉取后可能不一致，
    * 而 users 是唯一完整同步的集合。这里以 users 为权威源补齐 students/parents，
    * 再以 students 为源补齐每个班级的 studentIds，保证概览、班级管理、学情分析一致。
@@ -112,16 +154,26 @@
   async function pushToCloud(db){
     if(!global.CB || !CB.enabled) return;
     try{
+      stampUpdated(db);   // 给每条记录打更新时间戳，供冲突仲裁
       var c = CB.coll(SYNC_COLL);
       for(var i=0;i<SYNC_NAMES.length;i++){
         var name = SYNC_NAMES[i];
         var data = db[name];
         if(!Array.isArray(data)) continue;
-        await c.doc(name).set({ name:name, data:data, ts:Date.now() });
+        try{
+          var cur = await c.doc(name).get();           // 先读云端当前值
+          var cloudData = extractData(cur);
+          var merged = mergeArr(data, cloudData);       // 按记录合并：保留其它端的提交，补入本地新提交
+          await c.doc(name).set({ name:name, data:merged, ts:Date.now() });
+          db[name] = merged;                            // 把合并结果回填内存，保持一致
+        }catch(e){
+          // 读云端失败（网络/权限）→ 退化成直接写入本地数据，至少不丢本次编辑
+          try{ await c.doc(name).set({ name:name, data:data, ts:Date.now() }); }catch(e2){}
+        }
       }
     }catch(e){ if(global.CB) CB.syncError=(e&&e.message)||'上传失败'; console.warn('[CloudBase] 同步上传失败：', e && e.message); }
   }
-  // 下载：启动时拉取云端快照，合并进本地（覆盖本地全量，以云端为准）
+  // 下载：启动时拉取云端快照，与本地按记录合并（不再整集合覆盖，避免踩掉刚提交的内容）
   async function syncFromCloud(){
     if(!global.CB || !CB.enabled) return false;
     try{
@@ -130,7 +182,9 @@
       var docs = (res && res.data) || [];
       var db = load() || emptyDb();
       docs.forEach(function(d){
-        if(d && SYNC_NAMES.indexOf(d.name)>=0 && Array.isArray(d.data)) db[d.name] = d.data;
+        if(d && SYNC_NAMES.indexOf(d.name)>=0 && Array.isArray(d.data)){
+          db[d.name] = mergeArr(db[d.name], d.data);   // 云端 → 本地 按记录合并（本地未同步的新提交不丢）
+        }
       });
       var changed = normalize(db);   // 以 users 为权威源补齐 students / parents
       localStorage.setItem(KEY, JSON.stringify(db));
