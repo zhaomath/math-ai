@@ -296,8 +296,10 @@
     // 积分 & 错题库
     var stu=DB.byId(db.students,state.stu.id)||DB.byId(db.users,state.stu.id); DB.addPoints(db, state.stu.id, (score>=90?10:score>=60?5:2)); // v2.22
     answers.filter(function(a){return !a.correct;}).forEach(function(a){
+      var q=DB.byId(state.hw.questions,a.qid);
       db.wrongBook.push({ id:DB.uid('w'), studentId:stu.id, qid:a.qid, hwId:state.hw.id, type:'作业',
-        errorType:a.errorType, reason:a.reason, times:1, lastAt:Date.now(), variants:[] });
+        errorType:a.errorType, reason:a.reason, times:1, lastAt:Date.now(), variants:[],
+        analysis:(global.Analysis?Analysis.build({errorType:a.errorType,reason:a.reason,type:q?q.type:null,kp:q?q.kp:null},q):null) });
     });
     DB.save(db);
     UI.toast(stu.name+' 成绩已发布：'+score+'分，+'+((score>=90?10:score>=60?5:2))+'积分');
@@ -397,7 +399,16 @@
   function stuReport(stuId){
     var r=AI.studentReport(stuId);
     var subs=r.subs.slice(-6).reverse().map(function(s){ return '<div class="list-item"><div style="flex:1">作业得分 <b>'+s.score+'分</b><div class="muted">'+UI.fmtDate(s.submittedAt)+'</div></div></div>'; }).join('');
-    var body='<p>姓名：<b>'+UI.esc(r.stu.name)+'</b> ｜ 积分：<b>'+r.points+'</b> ｜ 错题：<b>'+r.wrongCount+'</b> ｜ 平均正确率：<b>'+(r.avg==null?'—':r.avg.toFixed(0)+'%')+'</b></p><h3 style="margin-top:14px">最近作业</h3>'+(subs||'<p class="muted">暂无</p>');
+    var db=DB.get();
+    var wbs=db.wrongBook.filter(function(w){return w.studentId===stuId;});
+    var wrongSec = wbs.length ? ('<h3 style="margin-top:14px">错题与解析</h3>' + wbs.map(function(w){
+        var q=AI.findQ(w.hwId,w.qid); var stem=q?q.stem:'(原题已归档)';
+        var head = '<div class="q"><div class="q-meta"><span class="pill err">'+UI.esc(w.errorType)+'</span><span class="muted">'+UI.fmtDate(w.lastAt)+'</span></div>'+
+          '<div>'+UI.esc(stem)+' <span class="muted">(答案：'+(q?q.answer:'')+')</span></div>'+
+          (global.Analysis?('<div class="row" style="margin-top:6px">'+Analysis.toggleHTML(w)+'</div>'):'')+'</div>';
+        return head;
+      }).join('')) : '';
+    var body='<p>姓名：<b>'+UI.esc(r.stu.name)+'</b> ｜ 积分：<b>'+r.points+'</b> ｜ 错题：<b>'+r.wrongCount+'</b> ｜ 平均正确率：<b>'+(r.avg==null?'—':r.avg.toFixed(0)+'%')+'</b></p><h3 style="margin-top:14px">最近作业</h3>'+(subs||'<p class="muted">暂无</p>')+wrongSec;
     UI.modal({ title:'学生个人报告', body:body, actions:[{label:'关闭',cls:'btn-primary'}] });
   }
 

@@ -70,8 +70,8 @@
     var g=AI.gradeQuestion(q,val); var fb=document.getElementById('fb-'+i);
     if(!val){ fb.innerHTML=''; return; }
     if(g.correct){ fb.className='feedback ok'; fb.innerHTML='✅ 正确！'; }
-    else { fb.className='feedback err'; fb.innerHTML='❌ '+UI.esc(g.errorType)+'：'+UI.esc(g.reason)+' <button class="btn btn-sm" id="ex-'+i+'">🔊 听讲解</button>';
-      var ex=document.getElementById('ex-'+i); if(ex) ex.onclick=function(){ AI.voice(AI.explain(q,g)); };
+    else { fb.className='feedback err'; fb.innerHTML='❌ '+UI.esc(g.errorType)+'：'+UI.esc(g.reason)+' <button class="btn btn-sm" id="ex-'+i+'">📖 详细解析</button>';
+      var ex=document.getElementById('ex-'+i); if(ex) ex.onclick=function(){ Analysis.modal(q,{errorType:g.errorType,reason:g.reason,type:q.type,kp:q.kp}); };
     }
   }
   async function submitHW(hw, answers){
@@ -81,7 +81,7 @@
     var correct=res.filter(function(a){return a.correct;}).length; var score=Math.round(correct/res.length*100);
     db.submissions.push({id:DB.uid('sub'),hwId:hw.id,studentId:App.user.id,answers:res,score:score,aiGraded:true,teacherReviewed:false,status:'submitted',submittedAt:Date.now()});
     var gain=score>=90?10:score>=60?5:2; DB.addPoints(db, App.user.id, gain); // v2.22：同时写 users（云端权威）与 students
-    res.filter(function(a){return !a.correct;}).forEach(function(a){ db.wrongBook.push({id:DB.uid('w'),studentId:App.user.id,qid:a.qid,hwId:hw.id,type:'作业',errorType:a.errorType,reason:a.reason,times:1,lastAt:Date.now(),variants:[]}); });
+    res.filter(function(a){return !a.correct;}).forEach(function(a){ var q=DB.byId(hw.questions,a.qid); db.wrongBook.push({id:DB.uid('w'),studentId:App.user.id,qid:a.qid,hwId:hw.id,type:'作业',errorType:a.errorType,reason:a.reason,times:1,lastAt:Date.now(),variants:[],analysis:(global.Analysis?Analysis.build({errorType:a.errorType,reason:a.reason,type:q?q.type:null,kp:q?q.kp:null},q):null)}); });
     UI.toast('正在保存到云端…', 2000);
     var sync = await DB.save(db);
     if(sync && sync.ok){
@@ -113,16 +113,15 @@
       return '<div class="q"><div class="q-meta"><span class="pill err">'+UI.esc(w.errorType)+'</span><span class="muted">'+UI.fmtDate(w.lastAt)+'</span></div>'+
         '<div>题目：'+UI.esc(stem)+' <span class="muted">(答案：'+UI.esc(ans)+')</span></div>'+
         '<div class="muted" style="margin-top:4px">我的错误原因：'+UI.esc(w.reason||'—')+'</div>'+
-        '<div class="row" style="margin-top:8px"><button class="btn btn-sm" data-variant="'+w.id+'">📐 同类变式</button><button class="btn btn-sm" data-voice="'+w.id+'">🔊 语音讲解</button></div>'+
+        '<div class="row" style="margin-top:8px"><button class="btn btn-sm" data-variant="'+w.id+'">📐 同类变式</button>'+(global.Analysis?Analysis.toggleHTML(w):'')+'</div>'+
         '<div id="var-'+w.id+'"></div></div>';
     }).join('');
     var html=card('📒 我的错题本（'+wbs.length+'道）', rows);
     return set(html, function(){
       document.querySelectorAll('[data-variant]').forEach(function(x){ x.onclick=function(){ var w=DB.byId(db.wrongBook,x.getAttribute('data-variant')); var q=AI.findQ(w.hwId,w.qid); if(!q){UI.toast('原题不可用');return;} var v=AI.variant(q); if(!v){UI.toast('暂无可推送变式');return;}
         document.getElementById('var-'+w.id).innerHTML='<div class="q" style="margin-top:8px"><b>变式题：</b>'+UI.esc(v.stem)+'<div style="margin-top:6px">答：<input id="vans-'+w.id+'"> <button class="btn btn-sm" id="vchk-'+w.id+'">验证</button></div><div id="vfb-'+w.id+'"></div></div>';
-        document.getElementById('vchk-'+w.id).onclick=function(){ var g=AI.gradeQuestion(v,document.getElementById('vans-'+w.id).value); var fb=document.getElementById('vfb-'+w.id); if(g.correct){fb.className='feedback ok';fb.innerHTML='✅ 掌握啦！';} else {fb.className='feedback err';fb.innerHTML='❌ '+UI.esc(g.reason)+' <button class="btn btn-sm" onclick="AI.voice(\''+escJs(AI.explain(v,g))+'\')">🔊讲解</button>';} };
+        document.getElementById('vchk-'+w.id).onclick=function(){ var g=AI.gradeQuestion(v,document.getElementById('vans-'+w.id).value); var fb=document.getElementById('vfb-'+w.id); if(g.correct){fb.className='feedback ok';fb.innerHTML='✅ 掌握啦！';} else {fb.className='feedback err';fb.innerHTML='❌ '+UI.esc(g.reason)+' <button class="btn btn-sm" id="vdx-'+w.id+'">📖 详细解析</button>'; var bx=document.getElementById('vdx-'+w.id); if(bx) bx.onclick=function(){ Analysis.modal(v,{errorType:g.errorType,reason:g.reason,type:v.type,kp:v.kp}); };} };
       }; });
-      document.querySelectorAll('[data-voice]').forEach(function(x){ x.onclick=function(){ var w=DB.byId(db.wrongBook,x.getAttribute('data-voice')); var q=AI.findQ(w.hwId,w.qid); AI.voice(AI.explain(q,{errorType:w.errorType,reason:w.reason})); }; });
     });
   }
 

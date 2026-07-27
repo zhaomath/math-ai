@@ -161,6 +161,29 @@ th{ color:var(--muted); font-weight:600; font-size:13px; }
   .card{ box-shadow:none; border:1px solid #ccc; }
 }
 
+/* ============ 错题文字解析（移动端纯文字方案） ============ */
+:root{ --ana-font:15px; }
+.ana{ margin-top:10px; border:1px solid var(--line); border-radius:12px;
+  background:linear-gradient(0deg, var(--theme-bg), #fff); padding:10px 12px; }
+.ana-head{ font-size:13px; color:var(--muted); margin-bottom:6px; }
+.ana-body{ font-size:var(--ana-font); line-height:1.7; color:var(--text); }
+.ana-loading{ padding:10px 2px; }
+.ana-fontbar{ display:flex; align-items:center; gap:8px; margin-bottom:8px;
+  padding-bottom:8px; border-bottom:1px dashed var(--line); }
+.ana-fontbar .muted{ font-size:13px; }
+.ana-font{ padding:3px 10px; font-size:13px; line-height:1; min-width:34px; }
+.ana-sec{ border-top:1px dashed var(--line); padding:8px 0; }
+.ana-sec:first-of-type{ border-top:none; padding-top:2px; }
+.ana-sec summary{ cursor:pointer; font-weight:700; color:var(--primary); font-size:.95em;
+  list-style:none; outline:none; user-select:none; }
+.ana-sec summary::-webkit-details-marker{ display:none; }
+.ana-sec summary::before{ content:"▸ "; }
+.ana-sec[open] summary::before{ content:"▾ "; }
+.ana-sec-body{ margin-top:6px; }
+.ana-sec-body p{ margin:2px 0; }
+.ana-steps, .ana-kp{ margin:6px 0 0 20px; padding:0; }
+.ana-steps li, .ana-kp li{ margin:4px 0; }
+
 /* ============ 云端同步状态条 ============ */
 .cloud-status{ display:flex; flex-direction:column; gap:2px; margin:0 0 14px; padding:10px 14px; border-radius:12px; font-size:13px; line-height:1.45; text-align:left; }
 .cloud-status b{ font-size:14px; }

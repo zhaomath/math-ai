@@ -71,12 +71,12 @@
         '<div>'+UI.esc(stem)+' <span class="muted">(答案：'+(q?q.answer:'')+')</span></div>'+
         '<div class="muted" style="margin-top:4px">错因：'+UI.esc(w.reason||'—')+'</div>'+
         '<div style="margin-top:6px">辅导重点：<input id="focus-'+w.id+'" value="'+UI.esc(w.parentFocus||'')+'" placeholder="标注需在家重点辅导的内容"><button class="btn btn-sm btn-primary" id="fs-'+w.id+'">保存</button></div>'+
-        '<div id="aiw-'+w.id+'" class="muted" style="margin-top:4px"></div></div>';
+        (global.Analysis?('<div class="row" style="margin-top:6px">'+Analysis.toggleHTML(w)+'</div>'):'')+
+        '</div>';
     }).join('');
     var html=card('📒 错题同步与辅导重点（'+wbs.length+'道）', rows);
     return set(html, function(){
       wbs.forEach(function(w){ var b=document.getElementById('fs-'+w.id); if(b) b.onclick=function(){ var db2=DB.get(); var e=DB.byId(db2.wrongBook,w.id); e.parentFocus=document.getElementById('focus-'+w.id).value; DB.save(db2); UI.toast('已保存辅导重点'); };
-        var aiw=document.getElementById('aiw-'+w.id); if(aiw) aiw.innerHTML='💡 家庭建议：'+esc(AI.explain(AI.findQ(w.hwId,w.qid),{errorType:w.errorType,reason:w.reason})).slice(0,40)+'…';
       });
     });
   }
