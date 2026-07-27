@@ -40,11 +40,13 @@
     registerSW();
     wireInstall();
     wireAuth();
+    wireSyncBtn();
     // 初始化云端（未配置则自动降级本地模式）
     try{ await CB.init(); }catch(e){}
     if(CB.enabled){
       try{ await DB.syncFromCloud(); }catch(e){}
     }
+    startAutoSync();        // 后台定时从云端拉取并自动重绘，解决"多设备不及时同步"
     renderCloudStatus();   // 在登录页直接显示云端连接状态与失败原因
     var s=DB.getSession();
     if(s){ var db=DB.get(); var u=DB.byId(db.users, s.uid);
@@ -70,6 +72,37 @@
     var copyBtn = document.getElementById('btn-copy-err');
     if(copyBtn) copyBtn.onclick = async function(){
       try{ await navigator.clipboard.writeText(d.rawError); copyBtn.textContent='已复制'; setTimeout(function(){copyBtn.textContent='复制详情';},1500); }catch(e){ copyBtn.textContent='复制失败'; }
+    };
+  }
+
+  /* 实时同步：后台每 AUTO_SYNC_MS 从云端拉取并合并，发现数据变化就重绘当前页，
+   * 让教师/家长端能"实时"看到学生刚提交的作业，而不是必须重启/刷新页面。 */
+  var AUTO_SYNC_MS = 10000;
+  function startAutoSync(){
+    if(!global.CB || !CB.enabled) return;
+    if(global.__autoSyncStarted) return;
+    global.__autoSyncStarted = true;
+    setInterval(async function(){
+      try{
+        if(document.querySelector('.modal-mask')) return;   // 弹窗打开时不打断用户
+        var r = await DB.syncFromCloud();
+        if(r && r.changed && App.user) App.render();          // 有变化才重绘，避免无谓闪烁
+      }catch(e){}
+    }, AUTO_SYNC_MS);
+  }
+  // 顶部"🔄 同步"按钮：立即从云端拉取一次，方便手动验证"到底传没传上云端"
+  function wireSyncBtn(){
+    var btn = document.getElementById('btn-sync');
+    if(!btn) return;
+    btn.onclick = async function(){
+      if(!(global.CB && CB.enabled)){ UI.toast('当前未连接云端（本机模式），无法同步', 2600); return; }
+      var old = btn.textContent; btn.disabled = true; btn.textContent = '同步中…';
+      try{
+        var r = await DB.syncFromCloud();
+        if(r && r.changed && App.user) App.render();
+        UI.toast(r && r.ok ? (r.changed ? '已同步，发现新数据' : '已同步，数据已是最新') : '同步失败，请检查网络', 2600);
+      }catch(e){ UI.toast('同步失败，请检查网络', 2600); }
+      finally{ btn.disabled = false; btn.textContent = old; }
     };
   }
 

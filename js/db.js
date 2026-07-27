@@ -173,24 +173,29 @@
       }
     }catch(e){ if(global.CB) CB.syncError=(e&&e.message)||'上传失败'; console.warn('[CloudBase] 同步上传失败：', e && e.message); }
   }
-  // 下载：启动时拉取云端快照，与本地按记录合并（不再整集合覆盖，避免踩掉刚提交的内容）
+  // 下载：启动时 / 定时拉取云端快照，与本地按记录合并（不再整集合覆盖，避免踩掉刚提交的内容）
+  // 返回 { ok, changed } —— changed 表示本次拉取是否真的带来了新数据（供 UI 决定要不要重绘）
   async function syncFromCloud(){
-    if(!global.CB || !CB.enabled) return false;
+    if(!global.CB || !CB.enabled) return {ok:false, changed:false};
     try{
       var c = CB.coll(SYNC_COLL);
       var res = await c.get();
       var docs = (res && res.data) || [];
       var db = load() || emptyDb();
+      var before = localStorage.getItem(KEY);            // 合并前快照，用于判断是否有变化
       docs.forEach(function(d){
         if(d && SYNC_NAMES.indexOf(d.name)>=0 && Array.isArray(d.data)){
           db[d.name] = mergeArr(db[d.name], d.data);   // 云端 → 本地 按记录合并（本地未同步的新提交不丢）
         }
       });
-      var changed = normalize(db);   // 以 users 为权威源补齐 students / parents
-      localStorage.setItem(KEY, JSON.stringify(db));
-      if(changed) pushToCloud(db);   // 把补齐后的数据回写云端，保证各端一致
-      return true;
-    }catch(e){ if(global.CB) CB.syncError=(e&&e.message)||'下载失败'; console.warn('[CloudBase] 同步下载失败：', e && e.message); return false; }
+      var normalizeChanged = normalize(db);            // 以 users 为权威源补齐 students / parents
+      var after = JSON.stringify(db);
+      var changed = (after !== before) || normalizeChanged;
+      if(changed) localStorage.setItem(KEY, after);     // 仅在真有变化时写回，避免无谓写入与无限重绘
+      if(normalizeChanged) pushToCloud(db);             // 把补齐后的数据回写云端，保证各端一致
+      CB._lastSyncAt = Date.now();
+      return {ok:true, changed:changed};
+    }catch(e){ if(global.CB) CB.syncError=(e&&e.message)||'下载失败'; console.warn('[CloudBase] 同步下载失败：', e && e.message); return {ok:false, changed:false}; }
   }
 
   /* ---------- 知识点题库（前端生成，不云端同步） ---------- */
